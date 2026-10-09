@@ -1,0 +1,774 @@
+// Core data model — Russia–Africa Tourism Platform (v1).
+//
+// Source of truth: docs/BUILD_SPEC.md, A6 (original entities) + B2 (approved additions).
+// Representation changes against A6 are listed in docs/BUILD_SPEC.md, B6.
+//
+// HARD RULE: no payment processing and no payment fields. Monetary values exist only
+// for display and quoting (Package.price, QuoteRequest.quoted_price). There are no
+// payment, transaction, payout, wallet or settlement tables, and none may be added in v1.
+//
+// Conventions: UUID primary keys, snake_case tables/columns, created_at/updated_at on
+// mutable rows. Country codes are ISO 3166-1 alpha-2 and reference the countries table.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────────
+
+enum OperatorStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED // needs follow-up before a decision (spec TV-2)
+  SUSPENDED // was approved, badge now shows "revoked"
+}
+
+enum DmcStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum PackageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PriceBasis {
+  PER_PERSON
+  PER_GROUP
+}
+
+enum QuoteRequestStatus {
+  OPEN
+  QUOTED
+  CLOSED
+}
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+}
+
+enum TranslatorVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum TranslationJobType {
+  DOCUMENT // async document translation
+  LIVE // real-time interpretation via chat handoff
+}
+
+enum RequesterType {
+  TOURIST
+  OPERATOR
+  DMC
+}
+
+enum TranslationJobStatus {
+  REQUESTED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum InquiryStatus {
+  NEW
+  RESPONDED
+  CLOSED
+}
+
+enum InquiryChannel {
+  TELEGRAM
+  WEB
+}
+
+enum VisaApplicationStatus {
+  NOT_STARTED
+  GATHERING_DOCUMENTS
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum GuideKind {
+  DESTINATION // destination overview
+  LOGISTICS // "how to actually get there": routings, layover visas, seasons
+}
+
+enum FamTripStatus {
+  PLANNED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  MODERATOR // operator approval, review moderation, translator verification
+  CONTENT_EDITOR // visa guides, destination guides, insurer data
+}
+
+enum AccountRole {
+  OPERATOR
+  DMC
+  TRANSLATOR
+}
+
+enum MediaKind {
+  PHOTO
+  VIDEO
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OperatorDocumentType {
+  BUSINESS_REGISTRATION
+  TOURISM_LICENSE
+  OTHER
+}
+
+// ─── Reference data ───────────────────────────────────────────────────────────
+
+model Country {
+  code   String @id @db.Char(2)
+  nameEn String @map("name_en")
+  nameRu String @map("name_ru")
+
+  operators        Operator[]
+  dmcs             Dmc[]
+  packages         Package[]
+  translators      Translator[]
+  visaGuides       VisaGuide[]
+  destinationGuides DestinationGuide[]
+
+  @@map("countries")
+}
+
+// ─── People & accounts ────────────────────────────────────────────────────────
+
+/// Internal staff account (spec: AdminUser).
+model AdminUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         AdminRole
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  auditEntries       AuditLog[]
+  approvedOperators  Operator[]         @relation("OperatorApprovedBy")
+  reviewedDocuments  OperatorDocument[]
+  moderatedReviews   Review[]
+  issuedInvites      ReviewInvite[]
+  spotCheckedTranslators Translator[]
+  verifiedInsurers   Insurer[]
+  updatedVisaApplications VisaApplication[]
+
+  @@map("admin_users")
+}
+
+/// Login for an operator, DMC or translator on their portal (B2 addition).
+/// Exactly one of operator_id / dmc_id / translator_id is set, matching role (CHECK in SQL).
+model Account {
+  id           String      @id @default(uuid()) @db.Uuid
+  email        String      @unique
+  passwordHash String      @map("password_hash")
+  role         AccountRole
+  active       Boolean     @default(true)
+  operatorId   String?     @map("operator_id") @db.Uuid
+  dmcId        String?     @map("dmc_id") @db.Uuid
+  translatorId String?     @map("translator_id") @db.Uuid
+  lastLoginAt  DateTime?   @map("last_login_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  operator     Operator?   @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  dmc          Dmc?        @relation(fields: [dmcId], references: [id], onDelete: Cascade)
+  translator   Translator? @relation(fields: [translatorId], references: [id], onDelete: Cascade)
+  auditEntries AuditLog[]
+
+  @@index([operatorId])
+  @@index([dmcId])
+  @@index([translatorId])
+  @@map("accounts")
+}
+
+/// A Telegram bot / Mini App user — tourists and DMC staff using Telegram (B2 addition).
+model TelegramUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  telegramId   BigInt    @unique @map("telegram_id")
+  username     String?
+  firstName    String?   @map("first_name")
+  lastName     String?   @map("last_name")
+  languageCode String?   @map("language_code")
+  consentAt    DateTime? @map("consent_at") // privacy-policy consent
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  inquiries        Inquiry[]
+  translationJobs  TranslationJob[]
+  visaApplications VisaApplication[]
+
+  @@map("telegram_users")
+}
+
+// ─── Trust & verification ─────────────────────────────────────────────────────
+
+/// African ground operator (spec: Operator, extended per B2).
+model Operator {
+  id                   String         @id @default(uuid()) @db.Uuid
+  slug                 String         @unique // public URL: /operators/{slug}
+  name                 String
+  legalName            String?        @map("legal_name")
+  countryCode          String         @map("country_code") @db.Char(2)
+  businessRegNumber    String         @map("business_reg_number")
+  tourismBoardLicense  String         @map("tourism_board_license")
+  licensingAuthority   String         @map("licensing_authority") // e.g. "Uganda Tourism Board", "TALA"
+  address              String
+  yearEstablished      Int?           @map("year_established") // "years operating" is derived from this
+  referenceContactName String?        @map("reference_contact_name")
+  referenceContactInfo String?        @map("reference_contact_info")
+  websiteUrl           String?        @map("website_url") // badge and mirror pages link back here
+  email                String?
+  phone                String?
+  telegramUsername     String?        @map("telegram_username")
+  descriptionRu        String?        @map("description_ru")
+  descriptionEn        String?        @map("description_en")
+  status               OperatorStatus @default(PENDING)
+  statusReason         String?        @map("status_reason") // why rejected / flagged / suspended
+  verificationVideoUrl String?        @map("verification_video_url") // YouTube/Telegram link or storage URL
+  responseTimeScore    Float?         @map("response_time_score") // 0–100, computed (TV-6)
+  completenessScore    Float?         @map("completeness_score") // 0–100, computed (TV-6)
+  scoresComputedAt     DateTime?      @map("scores_computed_at")
+  badgeToken           String         @unique @map("badge_token") // unguessable id used by the embed widget
+  approvedAt           DateTime?      @map("approved_at")
+  approvedById         String?        @map("approved_by_id") @db.Uuid
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  country         Country            @relation(fields: [countryCode], references: [code])
+  approvedBy      AdminUser?         @relation("OperatorApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  accounts        Account[]
+  documents       OperatorDocument[]
+  media           Media[]
+  packages        Package[]
+  reviews         Review[]
+  reviewInvites   ReviewInvite[]
+  inquiries       Inquiry[]
+  translationJobs TranslationJob[]
+  famTrips        FamTripOperator[]
+
+  @@index([status])
+  @@index([countryCode, status])
+  @@map("operators")
+}
+
+/// Uploaded registration / licence scans for manual review (B2 addition). Never public.
+model OperatorDocument {
+  id               String               @id @default(uuid()) @db.Uuid
+  operatorId       String               @map("operator_id") @db.Uuid
+  type             OperatorDocumentType
+  storageKey       String               @map("storage_key") // object-storage key, private bucket
+  originalFilename String               @map("original_filename")
+  reviewedById     String?              @map("reviewed_by_id") @db.Uuid
+  reviewNotes      String?              @map("review_notes")
+  reviewedAt       DateTime?            @map("reviewed_at")
+  createdAt        DateTime             @default(now()) @map("created_at")
+
+  operator   Operator   @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  reviewedBy AdminUser? @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([operatorId])
+  @@map("operator_documents")
+}
+
+/// Operator photos and videos (camp, office, vehicles); optionally tied to a package (B2 addition).
+/// Either storage_key (uploaded) or external_url (YouTube/Telegram) is set (CHECK in SQL).
+model Media {
+  id          String           @id @default(uuid()) @db.Uuid
+  operatorId  String           @map("operator_id") @db.Uuid
+  packageId   String?          @map("package_id") @db.Uuid
+  kind        MediaKind
+  storageKey  String?          @map("storage_key")
+  externalUrl String?          @map("external_url")
+  captionRu   String?          @map("caption_ru")
+  captionEn   String?          @map("caption_en")
+  sortOrder   Int              @default(0) @map("sort_order")
+  status      ModerationStatus @default(PENDING)
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  operator Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  package  Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  @@index([operatorId])
+  @@index([packageId])
+  @@map("media")
+}
+
+/// One-time link sent to a traveller after their trip; a review can only be written through one.
+/// Only the SHA-256 hash of the token is stored.
+model ReviewInvite {
+  id             String    @id @default(uuid()) @db.Uuid
+  tokenHash      String    @unique @map("token_hash")
+  operatorId     String    @map("operator_id") @db.Uuid
+  packageId      String?   @map("package_id") @db.Uuid
+  recipientName  String    @map("recipient_name")
+  recipientContact String  @map("recipient_contact") // email or Telegram username the link was sent to
+  tripDate       DateTime  @map("trip_date") @db.Date
+  issuedById     String    @map("issued_by_id") @db.Uuid
+  expiresAt      DateTime  @map("expires_at")
+  usedAt         DateTime? @map("used_at")
+  revokedAt      DateTime? @map("revoked_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  operator Operator  @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  package  Package?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  issuedBy AdminUser @relation(fields: [issuedById], references: [id])
+  review   Review?
+
+  @@index([operatorId])
+  @@map("review_invites")
+}
+
+/// Post-trip feedback, moderated before publish (spec: Review, extended per B2).
+/// Ratings are 1–5 (CHECK in SQL). At least one of body_ru / body_en is set.
+model Review {
+  id                  String       @id @default(uuid()) @db.Uuid
+  operatorId          String       @map("operator_id") @db.Uuid
+  packageId           String?      @map("package_id") @db.Uuid
+  inviteId            String       @unique @map("invite_id") @db.Uuid
+  authorName          String       @map("author_name")
+  rating              Int          @db.SmallInt // overall
+  ratingGuide         Int?         @map("rating_guide") @db.SmallInt
+  ratingVehicle       Int?         @map("rating_vehicle") @db.SmallInt
+  ratingAccommodation Int?         @map("rating_accommodation") @db.SmallInt
+  ratingValue         Int?         @map("rating_value") @db.SmallInt
+  bodyRu              String?      @map("body_ru")
+  bodyEn              String?      @map("body_en")
+  originalLanguage    String       @default("ru") @map("original_language") @db.VarChar(8)
+  tripDate            DateTime     @map("trip_date") @db.Date
+  status              ReviewStatus @default(PENDING)
+  rejectionReason     String?      @map("rejection_reason")
+  moderatedById       String?      @map("moderated_by_id") @db.Uuid
+  moderatedAt         DateTime?    @map("moderated_at")
+  operatorReply       String?      @map("operator_reply")
+  operatorRepliedAt   DateTime?    @map("operator_replied_at")
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+
+  operator    Operator     @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  package     Package?     @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  invite      ReviewInvite @relation(fields: [inviteId], references: [id])
+  moderatedBy AdminUser?   @relation(fields: [moderatedById], references: [id], onDelete: SetNull)
+
+  @@index([operatorId, status])
+  @@index([status])
+  @@map("reviews")
+}
+
+/// "Request info" from a tourist to an operator (B2 addition).
+/// first_response_at feeds the operator response-time score (TV-6).
+model Inquiry {
+  id              String         @id @default(uuid()) @db.Uuid
+  telegramUserId  String?        @map("telegram_user_id") @db.Uuid
+  operatorId      String         @map("operator_id") @db.Uuid
+  packageId       String?        @map("package_id") @db.Uuid
+  channel         InquiryChannel @default(TELEGRAM)
+  contactName     String?        @map("contact_name")
+  contactInfo     String?        @map("contact_info")
+  message         String
+  travelMonth     String?        @map("travel_month") @db.VarChar(7) // YYYY-MM, optional
+  groupSize       Int?           @map("group_size")
+  status          InquiryStatus  @default(NEW)
+  firstResponseAt DateTime?      @map("first_response_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  telegramUser TelegramUser? @relation(fields: [telegramUserId], references: [id], onDelete: SetNull)
+  operator     Operator      @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  package      Package?      @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  @@index([operatorId, createdAt])
+  @@index([status])
+  @@map("inquiries")
+}
+
+// ─── B2B wholesale ────────────────────────────────────────────────────────────
+
+/// Russian demand-side company using the wholesale portal (spec: DMC).
+model Dmc {
+  id               String    @id @default(uuid()) @db.Uuid
+  name             String
+  legalName        String?   @map("legal_name")
+  countryCode      String    @default("RU") @map("country_code") @db.Char(2)
+  websiteUrl       String?   @map("website_url")
+  contactName      String?   @map("contact_name")
+  email            String?
+  phone            String?
+  telegramUsername String?   @map("telegram_username")
+  status           DmcStatus @default(PENDING)
+  statusReason     String?   @map("status_reason")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  country         Country             @relation(fields: [countryCode], references: [code])
+  accounts        Account[]
+  quoteRequests   QuoteRequest[]
+  listings        DmcPackageListing[]
+  translationJobs TranslationJob[]
+  famTrips        FamTripDmc[]
+
+  @@index([status])
+  @@map("dmcs")
+}
+
+/// One tour/safari product from an operator (spec: Package, extended per B2).
+/// price is display/quote only — never charged through the platform.
+model Package {
+  id              String        @id @default(uuid()) @db.Uuid
+  operatorId      String        @map("operator_id") @db.Uuid
+  slug            String        @unique
+  title           String
+  titleRu         String?       @map("title_ru")
+  descriptionRu   String?       @map("description_ru")
+  descriptionEn   String?       @map("description_en")
+  countryCode     String        @map("country_code") @db.Char(2) // main destination country
+  durationDays    Int           @map("duration_days")
+  price           Decimal?      @db.Decimal(12, 2) // indicative public/rack price, display only
+  currency        String?       @db.Char(3) // ISO 4217
+  priceBasis      PriceBasis    @default(PER_PERSON) @map("price_basis")
+  capacity        Int? // default max group size; per-date override in package_date_ranges
+  inclusions      String[]
+  exclusions      String[]
+  status          PackageStatus @default(DRAFT)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  operator      Operator            @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  country       Country             @relation(fields: [countryCode], references: [code])
+  dateRanges    PackageDateRange[]
+  media         Media[]
+  reviews       Review[]
+  reviewInvites ReviewInvite[]
+  inquiries     Inquiry[]
+  quoteRequests QuoteRequest[]
+  listings      DmcPackageListing[]
+
+  @@index([operatorId])
+  @@index([countryCode, status])
+  @@map("packages")
+}
+
+/// Spec Package.dates_available, stored as rows so DMCs can filter by date.
+model PackageDateRange {
+  id        String   @id @default(uuid()) @db.Uuid
+  packageId String   @map("package_id") @db.Uuid
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  capacity  Int? // overrides Package.capacity for these dates
+
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId, startDate])
+  @@map("package_date_ranges")
+}
+
+/// A DMC requesting terms on a package (spec: QuoteRequest, extended per B2).
+/// quoted_price is an offer for the DMC to settle off-platform; nothing is paid here.
+model QuoteRequest {
+  id              String             @id @default(uuid()) @db.Uuid
+  dmcId           String             @map("dmc_id") @db.Uuid
+  packageId       String             @map("package_id") @db.Uuid
+  status          QuoteRequestStatus @default(OPEN)
+  notes           String?
+  pax             Int?
+  travelStartDate DateTime?          @map("travel_start_date") @db.Date
+  travelEndDate   DateTime?          @map("travel_end_date") @db.Date
+  quotedPrice     Decimal?           @map("quoted_price") @db.Decimal(12, 2)
+  quotedCurrency  String?            @map("quoted_currency") @db.Char(3)
+  quoteTerms      String?            @map("quote_terms")
+  quotedAt        DateTime?          @map("quoted_at")
+  closedAt        DateTime?          @map("closed_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  dmc     Dmc     @relation(fields: [dmcId], references: [id], onDelete: Cascade)
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([dmcId, status])
+  @@index([packageId])
+  @@map("quote_requests")
+}
+
+/// Which DMC sells / white-labels which package (B2 addition). Drives mirror pages (B2B-4).
+model DmcPackageListing {
+  id              String   @id @default(uuid()) @db.Uuid
+  dmcId           String   @map("dmc_id") @db.Uuid
+  packageId       String   @map("package_id") @db.Uuid
+  whiteLabelTitle String?  @map("white_label_title")
+  dmcPageUrl      String?  @map("dmc_page_url") // the package page on the DMC's own site
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  dmc     Dmc     @relation(fields: [dmcId], references: [id], onDelete: Cascade)
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([dmcId, packageId])
+  @@map("dmc_package_listings")
+}
+
+/// Organised site-visit trip (spec: FamTrip; participant id arrays → join tables).
+model FamTrip {
+  id        String        @id @default(uuid()) @db.Uuid
+  title     String
+  startDate DateTime      @map("start_date") @db.Date
+  endDate   DateTime      @map("end_date") @db.Date
+  status    FamTripStatus @default(PLANNED)
+  capacity  Int?
+  itinerary Json          @default("[]") // [{ day: 1, titleRu, detailsRu, operatorId? }]
+  notes     String?
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  dmcs      FamTripDmc[]
+  operators FamTripOperator[]
+
+  @@map("fam_trips")
+}
+
+model FamTripDmc {
+  famTripId        String   @map("fam_trip_id") @db.Uuid
+  dmcId            String   @map("dmc_id") @db.Uuid
+  representativeName String? @map("representative_name")
+  confirmed        Boolean  @default(false)
+
+  famTrip FamTrip @relation(fields: [famTripId], references: [id], onDelete: Cascade)
+  dmc     Dmc     @relation(fields: [dmcId], references: [id], onDelete: Cascade)
+
+  @@id([famTripId, dmcId])
+  @@map("fam_trip_dmcs")
+}
+
+model FamTripOperator {
+  famTripId  String   @map("fam_trip_id") @db.Uuid
+  operatorId String   @map("operator_id") @db.Uuid
+  role       String? // e.g. "host", "ground handler"
+  confirmed  Boolean  @default(false)
+
+  famTrip  FamTrip  @relation(fields: [famTripId], references: [id], onDelete: Cascade)
+  operator Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+
+  @@id([famTripId, operatorId])
+  @@map("fam_trip_operators")
+}
+
+// ─── Concierge: translators ───────────────────────────────────────────────────
+
+/// Verified Russian-speaking guide/translator (spec: Translator, extended per B2).
+/// jobs_completed and rating are caches, recomputed when a job completes.
+model Translator {
+  id                   String                       @id @default(uuid()) @db.Uuid
+  name                 String
+  email                String?
+  phone                String?
+  telegramUsername     String?                      @map("telegram_username")
+  languages            String[] // ISO 639-1 codes, e.g. {ru,en,sw}
+  proficiency          Json                         @default("{}") // self-report: { "ru": "native", "sw": "B2" }
+  specialtyCountryCode String                       @map("specialty_country_code") @db.Char(2)
+  specialties          String[] // e.g. {safari_guide,legal,medical}
+  bioRu                String?                      @map("bio_ru")
+  verificationStatus   TranslatorVerificationStatus @default(PENDING) @map("verification_status")
+  spotCheckNotes       String?                      @map("spot_check_notes")
+  spotCheckedAt        DateTime?                    @map("spot_checked_at")
+  spotCheckedById      String?                      @map("spot_checked_by_id") @db.Uuid
+  jobsCompleted        Int                          @default(0) @map("jobs_completed")
+  rating               Decimal?                     @db.Decimal(3, 2) // average of job ratings, 1.00–5.00
+  createdAt            DateTime                     @default(now()) @map("created_at")
+  updatedAt            DateTime                     @updatedAt @map("updated_at")
+
+  specialtyCountry Country          @relation(fields: [specialtyCountryCode], references: [code])
+  spotCheckedBy    AdminUser?       @relation(fields: [spotCheckedById], references: [id], onDelete: SetNull)
+  accounts         Account[]
+  jobs             TranslationJob[]
+
+  @@index([specialtyCountryCode, verificationStatus])
+  @@map("translators")
+}
+
+/// A translation or interpretation request (spec: TranslationJob, extended per B2).
+/// The requester FK matching requester_type is set (CHECK in SQL).
+model TranslationJob {
+  id                  String               @id @default(uuid()) @db.Uuid
+  translatorId        String?              @map("translator_id") @db.Uuid // null until assigned
+  requesterType       RequesterType        @map("requester_type")
+  requesterTelegramUserId String?          @map("requester_telegram_user_id") @db.Uuid
+  requesterOperatorId String?              @map("requester_operator_id") @db.Uuid
+  requesterDmcId      String?              @map("requester_dmc_id") @db.Uuid
+  type                TranslationJobType
+  status              TranslationJobStatus @default(REQUESTED)
+  sourceLanguage      String               @map("source_language") @db.VarChar(8)
+  targetLanguage      String               @map("target_language") @db.VarChar(8)
+  description         String?
+  documentStorageKey  String?              @map("document_storage_key") // DOCUMENT jobs
+  scheduledAt         DateTime?            @map("scheduled_at") // LIVE jobs
+  deadline            DateTime?
+  rating              Int?                 @db.SmallInt // requester's 1–5 rating after completion
+  feedback            String?
+  completedAt         DateTime?            @map("completed_at")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+
+  translator            Translator?   @relation(fields: [translatorId], references: [id], onDelete: SetNull)
+  requesterTelegramUser TelegramUser? @relation(fields: [requesterTelegramUserId], references: [id], onDelete: SetNull)
+  requesterOperator     Operator?     @relation(fields: [requesterOperatorId], references: [id], onDelete: SetNull)
+  requesterDmc          Dmc?          @relation(fields: [requesterDmcId], references: [id], onDelete: SetNull)
+
+  @@index([translatorId, status])
+  @@index([status])
+  @@map("translation_jobs")
+}
+
+// ─── Concierge: insurance, visas, guides ──────────────────────────────────────
+
+/// Russian insurer with confirmed African claims capability (spec: Insurer, extended per B2).
+/// Informational only — no underwriting or policy sales.
+model Insurer {
+  id                    String    @id @default(uuid()) @db.Uuid
+  name                  String
+  nameRu                String?   @map("name_ru")
+  websiteUrl            String?   @map("website_url")
+  countriesCovered      String[]  @map("countries_covered") // ISO alpha-2 codes
+  claimsContact         String    @map("claims_contact")
+  repatriationConfirmed Boolean   @default(false) @map("repatriation_confirmed")
+  coverageRu            String?   @map("coverage_ru") // comparison-table column
+  exclusionsRu          String?   @map("exclusions_ru") // comparison-table column
+  medicalLimitInfo      String?   @map("medical_limit_info") // free text, e.g. "up to 50 000 EUR"
+  verifiedAt            DateTime? @map("verified_at")
+  verifiedById          String?   @map("verified_by_id") @db.Uuid
+  notes                 String?
+  published             Boolean   @default(false)
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  verifiedBy AdminUser? @relation(fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@map("insurers")
+}
+
+/// Per-country visa content (spec: VisaGuide, extended per B2).
+/// covered_countries handles multi-country visas, e.g. East African Tourist Visa = {KE,UG,RW}.
+model VisaGuide {
+  id               String        @id @default(uuid()) @db.Uuid
+  slug             String        @unique
+  countryCode      String        @map("country_code") @db.Char(2) // primary country (where the guide is listed)
+  coveredCountries String[]      @map("covered_countries")
+  visaType         String        @map("visa_type") // e.g. "eTA", "eVisa", "East African Tourist Visa"
+  titleRu          String        @map("title_ru")
+  requirementsRu   String        @map("requirements_ru") // Markdown
+  checklistItems   Json          @default("[]") @map("checklist_items") // [{ key, labelRu, required }] for VI-2
+  officialUrl      String?       @map("official_url")
+  feeInfo          String?       @map("fee_info") // display text only, e.g. "USD 30"
+  processingTime   String?       @map("processing_time")
+  status           ContentStatus @default(DRAFT)
+  lastUpdated      DateTime      @default(now()) @map("last_updated") // last time the facts were verified
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  country      Country           @relation(fields: [countryCode], references: [code])
+  applications VisaApplication[]
+
+  @@index([countryCode, status])
+  @@map("visa_guides")
+}
+
+/// Informational visa status tracker (VI-3). No passport data, no government-portal integration.
+model VisaApplication {
+  id             String                @id @default(uuid()) @db.Uuid
+  telegramUserId String                @map("telegram_user_id") @db.Uuid
+  visaGuideId    String                @map("visa_guide_id") @db.Uuid
+  status         VisaApplicationStatus @default(NOT_STARTED)
+  travelDate     DateTime?             @map("travel_date") @db.Date
+  checkedItems   String[]              @map("checked_items") // checklist item keys the user has ticked
+  notes          String?
+  updatedById    String?               @map("updated_by_id") @db.Uuid // staff member, if staff-updated
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  telegramUser TelegramUser @relation(fields: [telegramUserId], references: [id], onDelete: Cascade)
+  visaGuide    VisaGuide    @relation(fields: [visaGuideId], references: [id], onDelete: Cascade)
+  updatedBy    AdminUser?   @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([telegramUserId])
+  @@map("visa_applications")
+}
+
+/// Destination and "how to get there" content for the public site (B2 addition).
+model DestinationGuide {
+  id          String        @id @default(uuid()) @db.Uuid
+  slug        String        @unique
+  countryCode String        @map("country_code") @db.Char(2)
+  kind        GuideKind
+  titleRu     String        @map("title_ru")
+  summaryRu   String?       @map("summary_ru")
+  bodyRu      String        @map("body_ru") // Markdown
+  titleEn     String?       @map("title_en")
+  bodyEn      String?       @map("body_en")
+  status      ContentStatus @default(DRAFT)
+  publishedAt DateTime?     @map("published_at")
+  lastUpdated DateTime      @default(now()) @map("last_updated")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  country Country @relation(fields: [countryCode], references: [code])
+
+  @@index([countryCode, kind, status])
+  @@map("destination_guides")
+}
+
+// ─── Audit ────────────────────────────────────────────────────────────────────
+
+/// Who changed what and why: approvals, rejections, moderation, status changes (B2 addition).
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorAdminId   String?  @map("actor_admin_id") @db.Uuid
+  actorAccountId String?  @map("actor_account_id") @db.Uuid
+  action         String // e.g. "operator.approve", "review.reject"
+  entityType     String   @map("entity_type")
+  entityId       String   @map("entity_id") @db.Uuid
+  reason         String?
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  actorAdmin   AdminUser? @relation(fields: [actorAdminId], references: [id], onDelete: SetNull)
+  actorAccount Account?   @relation(fields: [actorAccountId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
+}

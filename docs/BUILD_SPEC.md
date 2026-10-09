@@ -209,11 +209,43 @@ Scoring formulas (TV-6) are undefined, e.g. median time from inquiry to first op
 - **Abuse:** rate limiting, spam protection on review/inquiry forms, and file-type/size limits on uploads.
 - **Ops:** backups, error tracking, CI (lint/typecheck/test), seed script per phase.
 
-### B5. Decisions needed from the product owner before Phase 0
+### B5. Decisions (answered by the product owner, 2026-10-09)
 
-1. Backend language: **NestJS/TypeScript** (recommended, matches shared-types) or FastAPI?
-2. Hosting/data residency: a Russian-hosted segment for Russian users' personal data, or legal sign-off that it's not required?
-3. Admin: build in-repo (recommended) or Retool?
-4. Content site: SSR/ISR (recommended) or pure static export with rebuilds?
-5. Accept the data-model additions in B2 (they are additions, not redesigns)?
-6. Review trust mechanism: invite-only links issued by operator/admin after a trip, or open submission + moderation?
+| # | Question | Decision |
+|---|---|---|
+| 1 | Backend language | **TypeScript** — NestJS API, Prisma ORM, pnpm monorepo |
+| 2 | Hosting / Russian data residency (152-FZ) | **Not localising for now.** Users come from several countries; host wherever is best today and revisit later. Risk accepted by the product owner. |
+| 3 | Admin tooling | **Build in-repo** (`/apps/admin`), no Retool |
+| 4 | Content site rendering | **SSR/ISR** with on-demand revalidation, not a pure static export |
+| 5 | Data-model additions in B2 | **Accepted** — implemented in `services/api/prisma/schema.prisma` |
+| 6 | Review trust mechanism | **Invite-only**: a one-time link is sent to the traveller after the trip; a review can only be written through it |
+
+Consequences of decision 2: keep personal data in clearly separated tables (`telegram_users`, `accounts`,
+`inquiries`, `visa_applications`) and never store passport numbers or scans, so moving that data to a
+Russian-hosted database later stays a bounded job.
+
+Consequence of decision 6: in v1 only **staff** issue invites (`review_invites.issued_by_id` → admin).
+Operators supply traveller lists, which still lets an operator leave unhappy travellers out. Mitigation to
+decide before Phase 2: e.g. invite every traveller from confirmed inquiries/quotes, and show the
+invite-to-review ratio to moderators.
+
+### B6. Schema representation changes against A6 (flagged, not silent)
+
+These keep the meaning of the spec's fields but change how they are stored:
+
+| Spec field | Stored as | Why |
+|---|---|---|
+| `Operator.status` (pending/approved/rejected) | adds `FLAGGED`, `SUSPENDED` | TV-2 needs "flag"; a badge needs a revoked state |
+| Operator "years operating" (TV-1) | `year_established` | a year doesn't go stale; years are derived |
+| `Package.dates_available` | `package_date_ranges` table (start, end, optional capacity) | DMCs filter by date (B2B-2) |
+| `Package.title` | `title` + `title_ru` | Russian mirror pages need a Russian title |
+| `Review.body_ru` | `body_ru` + `body_en` + `original_language`, at least one body required | reviewers may write in English |
+| `Review.status` (pending/published) | adds `REJECTED` | moderation needs a reject outcome |
+| `Translator.specialty_country` | `specialty_country_code` + `specialties[]` | TR-2 searches by country **and** specialty |
+| `TranslationJob.requester_type` (tourist/operator) | adds `DMC`, plus a requester FK per type | DMCs request translations too |
+| `DMC.contact` | `contact_name`, `email`, `phone`, `telegram_username` | structured contact |
+| `FamTrip.date_range` | `start_date`, `end_date` | plain dates are easier to query |
+| `FamTrip.participant_dmc_ids/operator_ids` | `fam_trip_dmcs`, `fam_trip_operators` join tables | referential integrity, per-participant confirmation |
+| `AdminUser` (id, name, role) | adds `email`, `password_hash`, `active` | admin login |
+| `VisaGuide.country` | `country_code` (primary) + `covered_countries[]` | East African Tourist Visa spans KE/UG/RW |
+| `VisaGuide.requirements_ru` | + structured `checklist_items` | VI-2 checklist generator |
