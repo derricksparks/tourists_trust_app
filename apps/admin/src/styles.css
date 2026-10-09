@@ -101,11 +101,11 @@ textarea { resize: vertical; min-height: 72px; }
 
 /* Status pills */
 .pill { font: 600 0.72rem var(--font-body); letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; white-space: nowrap; }
-.s-PENDING { color: var(--idle); background: var(--idle-bg); }
-.s-APPROVED, .s-PUBLISHED { color: var(--ok); background: var(--ok-bg); }
+.s-PENDING, .s-NEW { color: var(--idle); background: var(--idle-bg); }
+.s-APPROVED, .s-PUBLISHED, .s-RESPONDED { color: var(--ok); background: var(--ok-bg); }
 .s-FLAGGED { color: var(--warn); background: var(--warn-bg); }
 .s-REJECTED { color: var(--bad); background: var(--bad-bg); }
-.s-SUSPENDED { color: var(--off); background: var(--off-bg); }
+.s-SUSPENDED, .s-CLOSED, .s-DRAFT { color: var(--off); background: var(--off-bg); }
 
 /* Tables */
 .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }

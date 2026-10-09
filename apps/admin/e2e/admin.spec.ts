@@ -60,7 +60,7 @@ test('a moderator publishes a review', async ({ page }) => {
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
   await expect(page.getByText('Nothing to moderate.')).toBeVisible();
   await page.getByRole('button', { name: 'Published' }).click();
-  await expect(page.locator('article')).toHaveCount(2);
+  await expect(page.getByText('Всё хорошо, но дорога была долгой. (демо)')).toBeVisible();
 });
 
 test('a content editor can look but not decide', async ({ page }) => {
@@ -77,4 +77,52 @@ test('signing out ends the session', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign out' }).click();
   await page.goto('/operators');
   await expect(page).toHaveURL(/\/login$/);
+});
+
+test('a moderator works the inquiry inbox', async ({ page }) => {
+  await signIn(page, 'moderator@example.com');
+  await page.getByRole('link', { name: /^Inquiries/ }).click();
+  const card = page.locator('article', { hasText: 'Сколько стоит сафари на 5 дней?' });
+  await expect(card).toContainText('Kilima Horizon Safaris (demo)');
+  await expect(card).toContainText('Forward to the operator: info@kilima-horizon-safaris-demo-tz.example.com');
+  await card.getByRole('button', { name: 'Send to traveller' }).click();
+  await expect(card.getByRole('alert')).toHaveText('Write the answer before sending.');
+  await card.getByRole('button', { name: 'Mark answered without sending' }).click();
+  await expect(page.getByText('Сколько стоит сафари на 5 дней?')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Answered' }).click();
+  await expect(page.getByText('Сколько стоит сафари на 5 дней?')).toBeVisible();
+});
+
+test('a content editor updates a visa guide and the site shows it', async ({ page, request }) => {
+  await signIn(page, 'editor@example.com');
+  await page.getByRole('link', { name: 'Visa guides' }).click();
+  await page.getByRole('link', { name: 'Электронная виза в Уганду' }).click();
+  await page.getByLabel('Processing time (Russian)').fill('обычно 3–5 рабочих дней');
+  await page.getByLabel('I checked these facts against the official source today').check();
+  await page.getByRole('button', { name: 'Add item' }).click();
+  await page.getByLabel('Item 5 (Russian)').fill('Бронь гостиницы');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('heading', { name: 'Visa guides' })).toBeVisible();
+
+  const res = await request.get(`${process.env.API_URL ?? 'http://localhost:3000'}/public/visa-guides/uganda-evisa`);
+  const guide = await res.json();
+  expect(guide.processingTime).toBe('обычно 3–5 рабочих дней');
+  expect(guide.checklistItems.at(-1)).toEqual({ key: 'item_5', labelRu: 'Бронь гостиницы', required: true });
+});
+
+test('a moderator can read guides but not change them', async ({ page }) => {
+  await signIn(page, 'moderator@example.com');
+  await page.getByRole('link', { name: 'Travel guides' }).click();
+  await expect(page.getByRole('link', { name: 'New' })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Как добраться до Уганды' }).click();
+  await expect(page.getByText('Only content editors can change guides.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+});
+
+test('the operator page gives the badge code to send the operator', async ({ page }) => {
+  await signIn(page, 'moderator@example.com');
+  await page.goto('/operators?q=Pearl');
+  await page.getByRole('link', { name: 'Pearl Gorilla Treks (demo)' }).click();
+  await expect(page.getByLabel('Badge embed code')).toHaveValue(/data-ttp-badge="demo-badge-pearl-gorilla-treks"/);
+  await expect(page.getByText('Currently shows: Verified')).toBeVisible();
 });

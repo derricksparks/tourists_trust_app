@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { OPERATOR_TRANSITIONS, OperatorDecision } from '@ttp/shared-types';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useCanModerate } from '../auth';
@@ -180,8 +181,10 @@ export function OperatorDetailPage() {
                 Saved. {op.name} is now {decide.data.status.toLowerCase()}.
               </p>
             )}
-            {op.approvedAt && <p className="muted">First approved {formatDate(op.approvedAt)}.</p>}
+            {op.approvedAt && <p className="muted">Last approved {formatDate(op.approvedAt)}.</p>}
           </section>
+
+          <BadgeCode token={op.badgeToken} status={op.status} />
 
           <section className="panel" aria-labelledby="history">
             <h2 id="history">History</h2>
@@ -210,3 +213,33 @@ const ExternalLink = ({ href }: { href: string }) => (
     {href.replace(/^https?:\/\//, '')}
   </a>
 );
+
+const PUBLIC_SITE = (import.meta.env.VITE_PUBLIC_SITE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+
+/** Embed code to send the operator for their own website. */
+function BadgeCode({ token, status }: { token: string; status: string }) {
+  const [copied, setCopied] = useState(false);
+  const code = `<script async src="${PUBLIC_SITE}/badge.js" data-ttp-badge="${token}"></script>`;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <section className="panel" aria-labelledby="badge">
+      <h2 id="badge">Badge for their website</h2>
+      <p className="muted" style={{ fontSize: '0.88rem' }}>
+        Send this to the operator to paste into their site. It shows “Verified” only while they are approved, and “Verification revoked” if
+        suspended. Add <span className="mono">data-lang="en"</span> for English.
+      </p>
+      <textarea readOnly value={code} rows={3} className="mono" aria-label="Badge embed code" onFocus={(e) => e.currentTarget.select()} />
+      <div className="row-wrap">
+        <button className="btn" type="button" onClick={copy}>{copied ? 'Copied' : 'Copy code'}</button>
+        <span className="muted" style={{ fontSize: '0.84rem' }}>Currently shows: {status === 'APPROVED' ? 'Verified' : status === 'SUSPENDED' ? 'Verification revoked' : 'Not verified'}</span>
+      </div>
+    </section>
+  );
+}

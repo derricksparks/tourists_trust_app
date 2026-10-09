@@ -61,3 +61,9 @@ export function useCanModerate() {
   const { admin } = useAuth();
   return admin?.role === 'SUPER_ADMIN' || admin?.role === 'MODERATOR';
 }
+
+/** Content editors and super admins edit visa and travel guides. */
+export function useCanEditContent() {
+  const { admin } = useAuth();
+  return admin?.role === 'SUPER_ADMIN' || admin?.role === 'CONTENT_EDITOR';
+}

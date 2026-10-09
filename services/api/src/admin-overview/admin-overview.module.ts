@@ -11,10 +11,11 @@ export class AdminOverviewController {
 
   @Get('stats')
   async stats(): Promise<AdminStats> {
-    const [byStatus, reviewsPending, listingsLive, dmcsOnboarded, quoteRequests, translatorJobsCompleted] =
+    const [byStatus, reviewsPending, inquiriesNew, listingsLive, dmcsOnboarded, quoteRequests, translatorJobsCompleted] =
       await this.prisma.$transaction([
         this.prisma.operator.groupBy({ by: ['status'], _count: { _all: true }, orderBy: { status: 'asc' } }),
         this.prisma.review.count({ where: { status: 'PENDING' } }),
+        this.prisma.inquiry.count({ where: { status: 'NEW' } }),
         this.prisma.package.count({ where: { status: 'PUBLISHED', operator: { status: 'APPROVED' } } }),
         this.prisma.dmc.count({ where: { status: 'APPROVED' } }),
         this.prisma.quoteRequest.count(),
@@ -24,7 +25,7 @@ export class AdminOverviewController {
     for (const row of byStatus) {
       operatorsByStatus[row.status] = (row._count as { _all: number })._all;
     }
-    return { operatorsByStatus, reviewsPending, listingsLive, dmcsOnboarded, quoteRequests, translatorJobsCompleted };
+    return { operatorsByStatus, reviewsPending, inquiriesNew, listingsLive, dmcsOnboarded, quoteRequests, translatorJobsCompleted };
   }
 
   @Get('countries')

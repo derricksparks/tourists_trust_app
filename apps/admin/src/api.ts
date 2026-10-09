@@ -2,7 +2,13 @@ import type {
   AdminLoginResult,
   AdminRole,
   AdminStats,
+  ChecklistItem,
+  ContentStatus,
   CountryOption,
+  DestinationGuideCreateInput,
+  DestinationGuideUpdateInput,
+  GuideKind,
+  InquiryStatus,
   OperatorCreateInput,
   OperatorDecisionInput,
   OperatorStatus,
@@ -10,6 +16,8 @@ import type {
   Paginated,
   ReviewDecisionInput,
   ReviewStatus,
+  VisaGuideCreateInput,
+  VisaGuideUpdateInput,
 } from '@ttp/shared-types';
 
 // Response shapes as the API serialises them (dates arrive as ISO strings).
@@ -79,6 +87,55 @@ export interface Review {
   package: { id: string; title: string } | null;
   invite: { recipientName: string; recipientContact: string; tripDate: string; createdAt: string };
   moderatedBy: { id: string; name: string } | null;
+}
+
+export interface Inquiry {
+  id: string;
+  channel: 'TELEGRAM' | 'WEB';
+  contactName: string | null;
+  contactInfo: string | null;
+  message: string;
+  travelMonth: string | null;
+  groupSize: number | null;
+  status: InquiryStatus;
+  firstResponseAt: string | null;
+  createdAt: string;
+  operator: { id: string; name: string; slug: string; email: string | null; phone: string | null; telegramUsername: string | null; websiteUrl: string | null };
+  package: { title: string; titleRu: string | null } | null;
+  telegramUser: { username: string | null; firstName: string | null; lastName: string | null; languageCode: string | null } | null;
+}
+
+export interface VisaGuide {
+  id: string;
+  slug: string;
+  countryCode: string;
+  coveredCountries: string[];
+  visaType: string;
+  titleRu: string;
+  requirementsRu: string;
+  checklistItems: ChecklistItem[];
+  officialUrl: string | null;
+  feeInfo: string | null;
+  processingTime: string | null;
+  status: ContentStatus;
+  lastUpdated: string;
+  updatedAt: string;
+}
+
+export interface DestinationGuide {
+  id: string;
+  slug: string;
+  countryCode: string;
+  kind: GuideKind;
+  titleRu: string;
+  summaryRu: string | null;
+  bodyRu: string;
+  titleEn: string | null;
+  bodyEn: string | null;
+  status: ContentStatus;
+  publishedAt: string | null;
+  lastUpdated: string;
+  updatedAt: string;
 }
 
 export interface AdminProfile {
@@ -162,6 +219,20 @@ export const api = {
   createOperator: (body: OperatorCreateInput) => request<Operator>('POST', '/admin/operators', body),
   updateOperator: (id: string, body: OperatorUpdateInput) => request<Operator>('PATCH', `/admin/operators/${id}`, body),
   decideOperator: (id: string, body: OperatorDecisionInput) => request<Operator>('POST', `/admin/operators/${id}/decision`, body),
+
+  inquiries: (p: { status?: InquiryStatus; page?: number }) => request<Paginated<Inquiry>>('GET', `/admin/inquiries${qs(p)}`),
+  replyToInquiry: (id: string, text: string) => request<Inquiry>('POST', `/admin/inquiries/${id}/reply`, { text }),
+  setInquiryStatus: (id: string, status: 'RESPONDED' | 'CLOSED') => request<Inquiry>('POST', `/admin/inquiries/${id}/status`, { status }),
+
+  visaGuides: () => request<VisaGuide[]>('GET', '/admin/visa-guides'),
+  visaGuide: (id: string) => request<VisaGuide>('GET', `/admin/visa-guides/${id}`),
+  createVisaGuide: (body: VisaGuideCreateInput) => request<VisaGuide>('POST', '/admin/visa-guides', body),
+  updateVisaGuide: (id: string, body: VisaGuideUpdateInput) => request<VisaGuide>('PATCH', `/admin/visa-guides/${id}`, body),
+
+  guides: () => request<DestinationGuide[]>('GET', '/admin/guides'),
+  guide: (id: string) => request<DestinationGuide>('GET', `/admin/guides/${id}`),
+  createGuide: (body: DestinationGuideCreateInput) => request<DestinationGuide>('POST', '/admin/guides', body),
+  updateGuide: (id: string, body: DestinationGuideUpdateInput) => request<DestinationGuide>('PATCH', `/admin/guides/${id}`, body),
 
   reviews: (p: { status?: ReviewStatus; page?: number }) => request<Paginated<Review>>('GET', `/admin/reviews${qs(p)}`),
   decideReview: (id: string, body: ReviewDecisionInput) => request<Review>('POST', `/admin/reviews/${id}/decision`, body),

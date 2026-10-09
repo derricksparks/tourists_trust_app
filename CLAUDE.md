@@ -15,12 +15,18 @@ Full spec: `docs/BUILD_SPEC.md` (Part A = requirements, Part B = gaps, decisions
 ## Stack & commands
 
 TypeScript everywhere: pnpm workspace, NestJS API, Prisma 6 + PostgreSQL 16, Jest + supertest;
-admin dashboard is React 18 + Vite + TanStack Query + React Router, tested with Vitest and Playwright.
+admin dashboard is React 18 + Vite + TanStack Query + React Router; public site is Next.js 14 (App Router);
+bot is plain TypeScript over the Bot API. Unit tests use Vitest (Jest in the API); browser tests use Playwright.
 Pinned versions are deliberate; don't bump majors without asking.
 
 - `pnpm --filter @ttp/shared-types build` — needed before the API typechecks/tests
 - `pnpm typecheck`, `pnpm test` (API tests need Postgres; they use the `ttp_test` database)
-- `pnpm e2e` — dashboard browser tests; needs the API running and re-seeds its database
+- `pnpm e2e` — dashboard and site browser tests; needs the API running, re-seeds its database, and the
+  site built (`pnpm --filter @ttp/web-content build`). Set `PW_CHROMIUM_PATH` if Playwright's browser isn't installed.
+- Public endpoints (`/public/*`) must only ever return approved operators and published content, and never
+  internal fields (status reasons, reference contacts, documents, badge tokens). `test/public.e2e.spec.ts` checks this.
+- Public site pages read the API at request time with tag-cached fetches (`lib/api.ts`); the API calls
+  `/api/revalidate` after changes. Building the site must not need the API.
 - Workflow rules (`OPERATOR_TRANSITIONS`, `REVIEW_TRANSITIONS`) and request schemas live in
   `packages/shared-types` and are used by both the API and the dashboard — change them there only.
 - Schema change: edit `schema.prisma`, then `cd services/api && npx prisma migrate dev --name <change>`.

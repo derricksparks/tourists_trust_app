@@ -5,3 +5,6 @@ coverage/
 *.log
 test-results/
 playwright-report/
+.env.local
+.next/
+*.tsbuildinfo

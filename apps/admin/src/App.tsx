@@ -2,7 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { NavLink, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { api } from './api';
 import { useAuth } from './auth';
+import { GuideFormPage, GuidesPage, VisaGuideFormPage, VisaGuidesPage } from './pages/ContentPages';
 import { DashboardPage } from './pages/DashboardPage';
+import { InquiriesPage } from './pages/InquiriesPage';
 import { LoginPage } from './pages/LoginPage';
 import { OperatorDetailPage } from './pages/OperatorDetailPage';
 import { OperatorFormPage } from './pages/OperatorFormPage';
@@ -22,6 +24,13 @@ export function App() {
           <Route path="operators/:id" element={<OperatorDetailPage />} />
           <Route path="operators/:id/edit" element={<OperatorFormPage />} />
           <Route path="reviews" element={<ReviewsPage />} />
+          <Route path="inquiries" element={<InquiriesPage />} />
+          <Route path="visa-guides" element={<VisaGuidesPage />} />
+          <Route path="visa-guides/new" element={<VisaGuideFormPage />} />
+          <Route path="visa-guides/:id" element={<VisaGuideFormPage />} />
+          <Route path="guides" element={<GuidesPage />} />
+          <Route path="guides/new" element={<GuideFormPage />} />
+          <Route path="guides/:id" element={<GuideFormPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>
@@ -43,6 +52,7 @@ function Shell() {
   const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats });
   const pendingOperators = stats.data?.operatorsByStatus.PENDING;
   const pendingReviews = stats.data?.reviewsPending;
+  const newInquiries = stats.data?.inquiriesNew;
 
   return (
     <div className="shell">
@@ -61,6 +71,11 @@ function Shell() {
           <NavLink to="/reviews">
             Reviews {!!pendingReviews && <span className="count" aria-label={`${pendingReviews} waiting`}>{pendingReviews}</span>}
           </NavLink>
+          <NavLink to="/inquiries">
+            Inquiries {!!newInquiries && <span className="count" aria-label={`${newInquiries} new`}>{newInquiries}</span>}
+          </NavLink>
+          <NavLink to="/visa-guides">Visa guides</NavLink>
+          <NavLink to="/guides">Travel guides</NavLink>
         </nav>
         <div className="who">
           <span>

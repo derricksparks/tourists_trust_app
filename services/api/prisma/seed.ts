@@ -53,7 +53,7 @@ async function main() {
   const approvedAt = new Date('2026-09-01T10:00:00Z');
   const op = (o: {
     slug: string; name: string; countryCode: string; licensingAuthority: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'FLAGGED' | 'SUSPENDED';
-    statusReason?: string; descriptionRu?: string; year?: number; video?: string;
+    statusReason?: string; descriptionRu?: string; year?: number; video?: string; badgeToken?: string;
   }) =>
     prisma.operator.create({
       data: {
@@ -75,22 +75,64 @@ async function main() {
         status: o.status,
         statusReason: o.statusReason,
         verificationVideoUrl: o.video,
-        badgeToken: token(),
+        badgeToken: o.badgeToken ?? token(),
         ...(o.status === 'APPROVED' || o.status === 'SUSPENDED' ? { approvedAt, approvedById: moderator.id } : {}),
       },
     });
 
-  const pearl = await op({ slug: 'pearl-gorilla-treks-demo-ug', name: 'Pearl Gorilla Treks (demo)', countryCode: 'UG', licensingAuthority: 'Uganda Tourism Board', status: 'APPROVED', year: 2011, video: 'https://www.youtube.com/watch?v=demo1', descriptionRu: 'Трекинг к горным гориллам в Бвинди и сафари в Королеве Елизавете. (демо)' });
+  const pearl = await op({ slug: 'pearl-gorilla-treks-demo-ug', name: 'Pearl Gorilla Treks (demo)', countryCode: 'UG', licensingAuthority: 'Uganda Tourism Board', status: 'APPROVED', year: 2011, video: 'https://www.youtube.com/watch?v=demo1', badgeToken: 'demo-badge-pearl-gorilla-treks', descriptionRu: 'Трекинг к горным гориллам в Бвинди и сафари в Королеве Елизавете. (демо)' });
   const kilima = await op({ slug: 'kilima-horizon-safaris-demo-tz', name: 'Kilima Horizon Safaris (demo)', countryCode: 'TZ', licensingAuthority: 'Tanzania Tourist Agency Licensing Authority (TALA)', status: 'APPROVED', year: 2008, video: 'https://www.youtube.com/watch?v=demo2', descriptionRu: 'Сафари в Серенгети и Нгоронгоро, восхождения на Килиманджаро. (демо)' });
   const savanna = await op({ slug: 'savanna-line-tours-demo-ke', name: 'Savanna Line Tours (demo)', countryCode: 'KE', licensingAuthority: 'Tourism Regulatory Authority (Kenya)', status: 'APPROVED', year: 2015, descriptionRu: 'Масаи-Мара, Амбосели и пляжи Диани. (демо)' });
   await op({ slug: 'zanzi-spice-journeys-demo-tz', name: 'Zanzi Spice Journeys (demo)', countryCode: 'TZ', licensingAuthority: 'Tanzania Tourist Agency Licensing Authority (TALA)', status: 'PENDING', year: 2019 });
   await op({ slug: 'nile-source-adventures-demo-ug', name: 'Nile Source Adventures (demo)', countryCode: 'UG', licensingAuthority: 'Uganda Tourism Board', status: 'PENDING', year: 2021 });
   await op({ slug: 'rift-valley-trails-demo-ke', name: 'Rift Valley Trails (demo)', countryCode: 'KE', licensingAuthority: 'Tourism Regulatory Authority (Kenya)', status: 'FLAGGED', statusReason: 'Licence number does not match the registry; asked operator for a copy.' });
   await op({ slug: 'quick-safari-deals-demo-ke', name: 'Quick Safari Deals (demo)', countryCode: 'KE', licensingAuthority: 'Tourism Regulatory Authority (Kenya)', status: 'REJECTED', statusReason: 'No valid tourism licence provided.' });
-  await op({ slug: 'lake-mburo-camps-demo-ug', name: 'Lake Mburo Camps (demo)', countryCode: 'UG', licensingAuthority: 'Uganda Tourism Board', status: 'SUSPENDED', statusReason: 'Licence expired; awaiting renewal.', year: 2012 });
+  await op({ slug: 'lake-mburo-camps-demo-ug', name: 'Lake Mburo Camps (demo)', countryCode: 'UG', licensingAuthority: 'Uganda Tourism Board', status: 'SUSPENDED', statusReason: 'Licence expired; awaiting renewal.', year: 2012, badgeToken: 'demo-badge-lake-mburo-camps' });
+
+
+  // Phase 1 needs 10–15 live listings: nine more approved operators, each with one package and reviews.
+  const UTB = 'Uganda Tourism Board';
+  const TALA = 'Tanzania Tourist Agency Licensing Authority (TALA)';
+  const TRA = 'Tourism Regulatory Authority (Kenya)';
+  const more: { slug: string; name: string; cc: 'UG' | 'TZ' | 'KE'; auth: string; year: number; ru: string; pkg: [string, string, number, number]; ratings: number[] }[] = [
+    { slug: 'kibale-canopy-walks-demo-ug', name: 'Kibale Canopy Walks (demo)', cc: 'UG', auth: UTB, year: 2014, ru: 'Шимпанзе в Кибале, озёра кратеров и чайные плантации Форт-Портала. (демо)', pkg: ['Кибале: шимпанзе и кратерные озёра', 'Kibale chimps & crater lakes', 3, 1350], ratings: [5, 4] },
+    { slug: 'murchison-river-safaris-demo-ug', name: 'Murchison River Safaris (demo)', cc: 'UG', auth: UTB, year: 2009, ru: 'Водопады Мерчисон, круизы по Нилу и сафари в северной Уганде. (демо)', pkg: ['Мерчисон-Фолс: Нил и саванна', 'Murchison Falls river & savanna', 4, 1180], ratings: [5] },
+    { slug: 'rwenzori-peak-guides-demo-ug', name: 'Rwenzori Peak Guides (demo)', cc: 'UG', auth: UTB, year: 2017, ru: 'Треккинг в горах Рувензори с сертифицированными гидами. (демо)', pkg: ['Рувензори: 7-дневный трек', 'Rwenzori 7-day trek', 7, 1990], ratings: [4, 4, 5] },
+    { slug: 'serengeti-dust-expeditions-demo-tz', name: 'Serengeti Dust Expeditions (demo)', cc: 'TZ', auth: TALA, year: 2006, ru: 'Великая миграция в Серенгети, кемпинги и лоджи северного круга. (демо)', pkg: ['Великая миграция, 7 дней', 'Great Migration, 7 days', 7, 3950], ratings: [5, 5] },
+    { slug: 'zanzibar-dhow-coast-demo-tz', name: 'Zanzibar Dhow Coast (demo)', cc: 'TZ', auth: TALA, year: 2012, ru: 'Стоун-Таун, плантации специй и морские прогулки на доу по Занзибару. (демо)', pkg: ['Занзибар: Стоун-Таун и острова', 'Zanzibar Stone Town & islands', 5, 890], ratings: [4] },
+    { slug: 'kilimanjaro-summit-crew-demo-tz', name: 'Kilimanjaro Summit Crew (demo)', cc: 'TZ', auth: TALA, year: 2010, ru: 'Восхождения на Килиманджаро по маршрутам Мачаме и Лемошо. (демо)', pkg: ['Килиманджаро, маршрут Мачаме', 'Kilimanjaro Machame route', 7, 2150], ratings: [5, 4, 4] },
+    { slug: 'amboseli-elephant-camps-demo-ke', name: 'Amboseli Elephant Camps (demo)', cc: 'KE', auth: TRA, year: 2013, ru: 'Слоны Амбосели на фоне Килиманджаро, палаточные лагеря. (демо)', pkg: ['Амбосели: слоны и Килиманджаро', 'Amboseli elephants', 3, 1060], ratings: [5] },
+    { slug: 'diani-reef-escapes-demo-ke', name: 'Diani Reef Escapes (demo)', cc: 'KE', auth: TRA, year: 2016, ru: 'Пляжи Диани, снорклинг в морском парке Кисите и сафари в Цаво. (демо)', pkg: ['Цаво и пляжи Диани', 'Tsavo & Diani beach', 6, 1420], ratings: [4, 5] },
+    { slug: 'samburu-north-trails-demo-ke', name: 'Samburu North Trails (demo)', cc: 'KE', auth: TRA, year: 2018, ru: 'Северная Кения: Самбуру, Ол-Педжета и культура самбуру. (демо)', pkg: ['Самбуру и Ол-Педжета', 'Samburu & Ol Pejeta', 5, 2280], ratings: [] },
+  ];
+  const approvedMore = [];
+  for (const [i, m] of more.entries()) {
+    const o = await op({ slug: m.slug, name: m.name, countryCode: m.cc, licensingAuthority: m.auth, status: 'APPROVED', year: m.year, descriptionRu: m.ru, video: i % 2 ? undefined : `https://www.youtube.com/watch?v=demo${i + 10}` });
+    approvedMore.push(o);
+    const [titleRu, title, days, price] = m.pkg;
+    const p = await prisma.package.create({
+      data: {
+        operatorId: o.id, slug: `${m.slug.replace(/-demo-..$/, '')}-${days}d-demo`, title: `${title} (demo)`, titleRu: `${titleRu} (демо)`,
+        descriptionRu: `${m.ru}`, countryCode: m.cc, durationDays: days, price, currency: 'USD', capacity: 6,
+        inclusions: ['transport', 'accommodation', 'guide'], exclusions: ['international flights', 'visa', 'insurance'], status: 'PUBLISHED',
+        dateRanges: { create: [{ startDate: day('2027-02-01'), endDate: day(`2027-02-${String(days).padStart(2, '0')}`) }, { startDate: day('2027-06-10'), endDate: day(`2027-06-${String(9 + days).padStart(2, '0')}`) }] },
+      },
+    });
+    for (const [j, rating] of m.ratings.entries()) {
+      const invite = await prisma.reviewInvite.create({
+        data: { tokenHash: sha256(`demo-invite-${m.slug}-${j}`), operatorId: o.id, packageId: p.id, recipientName: `Демо Турист ${j + 1}`, recipientContact: `t${j}@example.com`,
+          tripDate: day('2026-07-15'), issuedById: admin.id, expiresAt: new Date('2026-12-31T00:00:00Z'), usedAt: new Date('2026-08-01T00:00:00Z') },
+      });
+      await prisma.review.create({
+        data: { operatorId: o.id, packageId: p.id, inviteId: invite.id, authorName: ['Ирина (демо)', 'Дмитрий (демо)', 'Мария (демо)'][j], rating,
+          bodyRu: rating === 5 ? 'Всё прошло как обещали, гид встретил вовремя. (демо)' : 'Хорошая поездка, но жильё попроще, чем на фото. (демо)',
+          tripDate: day('2026-07-15'), status: 'PUBLISHED', moderatedById: moderator.id, moderatedAt: new Date('2026-08-03T00:00:00Z') },
+      });
+    }
+  }
 
   await prisma.auditLog.createMany({
-    data: [pearl, kilima, savanna].map((o) => ({
+    data: [pearl, kilima, savanna, ...approvedMore].map((o) => ({
       actorAdminId: moderator.id, action: 'operator.approve', entityType: 'operator', entityId: o.id, metadata: { to: 'APPROVED' }, createdAt: approvedAt,
     })),
   });
@@ -171,10 +213,10 @@ async function main() {
   // ── Telegram users & inquiries ──
   const tourist = await prisma.telegramUser.create({ data: { telegramId: BigInt(100000001), username: 'demo_tourist', firstName: 'Ольга', languageCode: 'ru', consentAt: new Date() } });
   await prisma.inquiry.create({
-    data: { telegramUserId: tourist.id, operatorId: pearl.id, packageId: gorilla.id, message: 'Есть ли места на февраль для двоих? (демо)', travelMonth: '2027-02', groupSize: 2, status: 'RESPONDED',
+    data: { telegramUserId: tourist.id, operatorId: pearl.id, packageId: gorilla.id, contactName: 'Ольга', contactInfo: '@demo_tourist', message: 'Есть ли места на февраль для двоих? (демо)', travelMonth: '2027-02', groupSize: 2, status: 'RESPONDED',
       createdAt: new Date('2026-09-10T08:00:00Z'), firstResponseAt: new Date('2026-09-10T11:30:00Z') },
   });
-  await prisma.inquiry.create({ data: { telegramUserId: tourist.id, operatorId: kilima.id, message: 'Сколько стоит сафари на 5 дней? (демо)' } });
+  await prisma.inquiry.create({ data: { telegramUserId: tourist.id, operatorId: kilima.id, contactName: 'Ольга', contactInfo: '@demo_tourist', message: 'Сколько стоит сафари на 5 дней? (демо)' } });
 
   // ── Translators ──
   const tr = await prisma.translator.create({
@@ -202,21 +244,37 @@ async function main() {
   });
 
   // ── Visa guides (DRAFT placeholders until verified) ──
-  const placeholder = '**ДЕМО-ТЕКСТ.** Требования необходимо проверить на официальном сайте перед публикацией.';
+  const placeholder = [
+    '**ДЕМО-ТЕКСТ.** Перед запуском редактор должен сверить требования с официальным сайтом.',
+    '',
+    '## Кто подаёт',
+    'Граждане России подают заявление онлайн до поездки.',
+    '',
+    '## Как подать',
+    '1. Подготовьте документы из списка ниже.',
+    '2. Заполните анкету на официальном сайте.',
+    '3. Оплатите сбор на сайте и сохраните подтверждение.',
+    '',
+    'Сроки и сборы меняются — проверяйте их на официальном сайте.',
+  ].join('\n');
   const checklist = [
     { key: 'passport', labelRu: 'Загранпаспорт, действующий 6+ месяцев', required: true },
     { key: 'photo', labelRu: 'Цифровое фото', required: true },
     { key: 'return_ticket', labelRu: 'Обратный билет', required: true },
-    { key: 'yellow_fever', labelRu: 'Сертификат о прививке от жёлтой лихорадки (если требуется)', required: false },
+    { key: 'yellow_fever', labelRu: 'Сертификат о прививке от жёлтой лихорадки', required: false },
   ];
-  const ugVisa = await prisma.visaGuide.create({ data: { slug: 'uganda-evisa', countryCode: 'UG', coveredCountries: ['UG'], visaType: 'eVisa', titleRu: 'Электронная виза в Уганду', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://visas.immigration.go.ug' } });
-  await prisma.visaGuide.create({ data: { slug: 'tanzania-zanzibar-evisa', countryCode: 'TZ', coveredCountries: ['TZ'], visaType: 'eVisa', titleRu: 'Электронная виза в Танзанию и на Занзибар', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://visa.immigration.go.tz' } });
-  await prisma.visaGuide.create({ data: { slug: 'kenya-eta', countryCode: 'KE', coveredCountries: ['KE'], visaType: 'eTA', titleRu: 'Электронное разрешение на въезд (eTA) в Кению', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://www.etakenya.go.ke' } });
-  await prisma.visaGuide.create({ data: { slug: 'east-african-tourist-visa', countryCode: 'KE', coveredCountries: ['KE', 'UG', 'RW'], visaType: 'East African Tourist Visa', titleRu: 'Восточноафриканская туристическая виза (Кения, Уганда, Руанда — без Танзании)', requirementsRu: placeholder, checklistItems: checklist } });
+  const ugVisa = await prisma.visaGuide.create({ data: { slug: 'uganda-evisa', status: 'PUBLISHED', countryCode: 'UG', coveredCountries: ['UG'], visaType: 'eVisa', titleRu: 'Электронная виза в Уганду', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://visas.immigration.go.ug' } });
+  await prisma.visaGuide.create({ data: { slug: 'tanzania-zanzibar-evisa', status: 'PUBLISHED', countryCode: 'TZ', coveredCountries: ['TZ'], visaType: 'eVisa', titleRu: 'Электронная виза в Танзанию и на Занзибар', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://visa.immigration.go.tz' } });
+  await prisma.visaGuide.create({ data: { slug: 'kenya-eta', status: 'PUBLISHED', countryCode: 'KE', coveredCountries: ['KE'], visaType: 'eTA', titleRu: 'Электронное разрешение на въезд (eTA) в Кению', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://www.etakenya.go.ke' } });
+  await prisma.visaGuide.create({ data: { slug: 'east-african-tourist-visa', status: 'PUBLISHED', countryCode: 'KE', coveredCountries: ['KE', 'UG', 'RW'], visaType: 'East African Tourist Visa', titleRu: 'Восточноафриканская туристическая виза (Кения, Уганда, Руанда — без Танзании)', requirementsRu: placeholder, checklistItems: checklist } });
   await prisma.visaApplication.create({ data: { telegramUserId: tourist.id, visaGuideId: ugVisa.id, status: 'GATHERING_DOCUMENTS', travelDate: day('2027-02-14'), checkedItems: ['passport'] } });
 
   // ── Destination / logistics guides ──
-  await prisma.destinationGuide.create({ data: { slug: 'uganda-how-to-get-there', countryCode: 'UG', kind: 'LOGISTICS', titleRu: 'Как добраться до Уганды', summaryRu: 'Маршруты через транзитные хабы (демо)', bodyRu: '**ДЕМО-ТЕКСТ.** Варианты перелётов, транзитные визы, сезонность.', status: 'DRAFT' } });
+  await prisma.destinationGuide.create({ data: { slug: 'uganda-how-to-get-there', countryCode: 'UG', kind: 'LOGISTICS', titleRu: 'Как добраться до Уганды', summaryRu: 'Маршруты через транзитные хабы (демо)', bodyRu: '**ДЕМО-ТЕКСТ.**\n\n## Перелёт\nПрямых рейсов из Москвы нет; обычно летят с одной пересадкой через крупный транзитный хаб.\n\n## Транзит\nПроверьте, нужна ли транзитная виза в стране пересадки.\n\n## Сезон\nСухие сезоны: декабрь–февраль и июнь–сентябрь.', status: 'PUBLISHED', publishedAt: new Date() } });
+  await prisma.destinationGuide.create({ data: { slug: 'kenya-how-to-get-there', countryCode: 'KE', kind: 'LOGISTICS', titleRu: 'Как добраться до Кении', summaryRu: 'Найроби и Момбаса: варианты перелёта (демо)', bodyRu: '**ДЕМО-ТЕКСТ.**\n\n## Перелёт\nОсновные аэропорты — Найроби и Момбаса.\n\n## Сезон\nМиграция в Масаи-Мара — июль–октябрь.', status: 'PUBLISHED', publishedAt: new Date() } });
+  await prisma.destinationGuide.create({ data: { slug: 'tanzania-how-to-get-there', countryCode: 'TZ', kind: 'LOGISTICS', titleRu: 'Как добраться до Танзании и Занзибара', summaryRu: 'Килиманджаро, Дар-эс-Салам, Занзибар (демо)', bodyRu: '**ДЕМО-ТЕКСТ.**\n\n## Перелёт\nДля сафари удобнее аэропорт Килиманджаро, для пляжей — Занзибар.', status: 'PUBLISHED', publishedAt: new Date() } });
+  await prisma.destinationGuide.create({ data: { slug: 'uganda-overview', countryCode: 'UG', kind: 'DESTINATION', titleRu: 'Уганда: гориллы, Нил и вулканы', summaryRu: 'Главные места Уганды (демо)', bodyRu: '**ДЕМО-ТЕКСТ.**\n\nБвинди, Мерчисон-Фолс, Кибале и Рувензори.', status: 'PUBLISHED', publishedAt: new Date() } });
+  await prisma.destinationGuide.create({ data: { slug: 'kenya-overview', countryCode: 'KE', kind: 'DESTINATION', titleRu: 'Кения: Масаи-Мара и океан', summaryRu: 'Главные места Кении (демо)', bodyRu: '**ДЕМО-ТЕКСТ.**\n\nМасаи-Мара, Амбосели, Самбуру и побережье.', status: 'PUBLISHED', publishedAt: new Date() } });
   await prisma.destinationGuide.create({ data: { slug: 'tanzania-overview', countryCode: 'TZ', kind: 'DESTINATION', titleRu: 'Танзания: что посмотреть', bodyRu: '**ДЕМО-ТЕКСТ.** Серенгети, Нгоронгоро, Занзибар.', status: 'PUBLISHED', publishedAt: new Date() } });
 
   // ── Portal accounts (logins come in later phases; rows exist so the shape is exercised) ──

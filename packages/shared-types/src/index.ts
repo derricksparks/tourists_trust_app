@@ -157,6 +157,7 @@ export type ReviewListQuery = z.infer<typeof reviewListQuerySchema>;
 export interface AdminStats {
   operatorsByStatus: Record<OperatorStatus, number>;
   reviewsPending: number;
+  inquiriesNew: number;
   listingsLive: number; // published packages from approved operators
   dmcsOnboarded: number; // approved DMCs
   quoteRequests: number;
@@ -168,3 +169,190 @@ export interface CountryOption {
   nameEn: string;
   nameRu: string;
 }
+
+// ─── Public API (website, Telegram bot, Mini App) ────────────────────────────
+
+export interface PublicOperatorSummary {
+  slug: string;
+  name: string;
+  countryCode: string;
+  licensingAuthority: string;
+  yearEstablished: number | null;
+  descriptionRu: string | null;
+  verifiedSince: string | null;
+  reviewCount: number;
+  averageRating: number | null;
+  packageCount: number;
+}
+
+export interface PublicPackage {
+  slug: string;
+  title: string;
+  titleRu: string | null;
+  descriptionRu: string | null;
+  durationDays: number;
+  price: string | null; // decimal as string, display only
+  currency: string | null;
+  priceBasis: 'PER_PERSON' | 'PER_GROUP';
+  capacity: number | null;
+  inclusions: string[];
+  exclusions: string[];
+  dates: { startDate: string; endDate: string; capacity: number | null }[];
+}
+
+export interface PublicReview {
+  id: string;
+  authorName: string;
+  rating: number;
+  bodyRu: string | null;
+  bodyEn: string | null;
+  tripDate: string;
+  packageTitle: string | null;
+  operatorReply: string | null;
+}
+
+export interface PublicOperatorDetail extends PublicOperatorSummary {
+  descriptionEn: string | null;
+  tourismBoardLicense: string;
+  businessRegNumber: string;
+  websiteUrl: string | null;
+  verificationVideoUrl: string | null;
+  telegramUsername: string | null;
+  responseTimeScore: number | null;
+  completenessScore: number | null;
+  country: CountryOption;
+  packages: PublicPackage[];
+  reviews: PublicReview[];
+}
+
+export interface PublicCountry extends CountryOption {
+  operatorCount: number;
+}
+
+/** What the embeddable badge shows. Non-approved operators are all "not_verified" so nothing leaks. */
+export type BadgeState = 'verified' | 'revoked' | 'not_verified';
+export interface BadgeStatus {
+  state: BadgeState;
+  operator?: { name: string; slug: string; countryCode: string; licensingAuthority: string; verifiedSince: string | null };
+}
+
+export interface ChecklistItem {
+  key: string;
+  labelRu: string;
+  required: boolean;
+}
+
+export interface PublicVisaGuide {
+  slug: string;
+  countryCode: string;
+  coveredCountries: string[];
+  visaType: string;
+  titleRu: string;
+  requirementsRu: string;
+  checklistItems: ChecklistItem[];
+  officialUrl: string | null;
+  feeInfo: string | null;
+  processingTime: string | null;
+  lastUpdated: string;
+}
+
+export const GUIDE_KINDS = ['DESTINATION', 'LOGISTICS'] as const;
+export type GuideKind = (typeof GUIDE_KINDS)[number];
+
+export interface PublicDestinationGuide {
+  slug: string;
+  countryCode: string;
+  kind: GuideKind;
+  titleRu: string;
+  summaryRu: string | null;
+  bodyRu: string;
+  lastUpdated: string;
+  publishedAt: string | null;
+}
+
+/** "Request info" sent from the Telegram Mini App. The sender is identified by Telegram initData. */
+export const inquiryCreateSchema = z.object({
+  operatorSlug: z.string().trim().min(1),
+  packageSlug: z.string().trim().min(1).optional(),
+  message: z.string().trim().min(10, 'Напишите хотя бы пару предложений').max(2000),
+  travelMonth: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+    .optional(),
+  groupSize: z.number().int().min(1).max(100).optional(),
+  consent: z.literal(true, { errorMap: () => ({ message: 'Нужно согласие на передачу данных туроператору' }) }),
+});
+export type InquiryCreateInput = z.infer<typeof inquiryCreateSchema>;
+
+// ─── Admin API: inquiries ────────────────────────────────────────────────────
+
+export const INQUIRY_STATUSES = ['NEW', 'RESPONDED', 'CLOSED'] as const;
+export type InquiryStatus = (typeof INQUIRY_STATUSES)[number];
+
+export const inquiryListQuerySchema = z.object({
+  status: z.enum(INQUIRY_STATUSES).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+});
+export type InquiryListQuery = z.infer<typeof inquiryListQuerySchema>;
+
+/** Staff mark an inquiry once the operator has replied (sets first_response_at) or it is done. */
+export const inquiryStatusSchema = z.object({ status: z.enum(['RESPONDED', 'CLOSED']) });
+export type InquiryStatusInput = z.infer<typeof inquiryStatusSchema>;
+
+/** A reply typed by staff, sent to the traveller through the bot. */
+export const inquiryReplySchema = z.object({ text: z.string().trim().min(2).max(3500) });
+export type InquiryReplyInput = z.infer<typeof inquiryReplySchema>;
+
+// ─── Admin API: content (visa guides, destination guides) ────────────────────
+
+export const CONTENT_STATUSES = ['DRAFT', 'PUBLISHED'] as const;
+export type ContentStatus = (typeof CONTENT_STATUSES)[number];
+
+const slug = z
+  .string()
+  .trim()
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Lowercase letters, digits and hyphens only');
+
+export const checklistItemSchema = z.object({
+  key: z.string().trim().regex(/^[a-z0-9_]+$/, 'Lowercase letters, digits and underscores only'),
+  labelRu: z.string().trim().min(1),
+  required: z.boolean(),
+});
+
+export const visaGuideCreateSchema = z.object({
+  slug,
+  countryCode,
+  coveredCountries: z.array(countryCode).min(1),
+  visaType: z.string().trim().min(1),
+  titleRu: z.string().trim().min(1),
+  requirementsRu: z.string().trim().min(1),
+  checklistItems: z.array(checklistItemSchema).default([]),
+  officialUrl: z.string().trim().url().nullable().optional(),
+  feeInfo: z.string().trim().min(1).nullable().optional(),
+  processingTime: z.string().trim().min(1).nullable().optional(),
+  status: z.enum(CONTENT_STATUSES).default('DRAFT'),
+  /** Tick when the facts were re-checked against the official source; bumps last_updated. */
+  factsVerified: z.boolean().optional(),
+});
+export type VisaGuideCreateInput = z.infer<typeof visaGuideCreateSchema>;
+export const visaGuideUpdateSchema = visaGuideCreateSchema.partial().omit({ checklistItems: true }).extend({
+  checklistItems: z.array(checklistItemSchema).optional(),
+});
+export type VisaGuideUpdateInput = z.infer<typeof visaGuideUpdateSchema>;
+
+export const destinationGuideCreateSchema = z.object({
+  slug,
+  countryCode,
+  kind: z.enum(GUIDE_KINDS),
+  titleRu: z.string().trim().min(1),
+  summaryRu: z.string().trim().min(1).nullable().optional(),
+  bodyRu: z.string().trim().min(1),
+  titleEn: z.string().trim().min(1).nullable().optional(),
+  bodyEn: z.string().trim().min(1).nullable().optional(),
+  status: z.enum(CONTENT_STATUSES).default('DRAFT'),
+  factsVerified: z.boolean().optional(),
+});
+export type DestinationGuideCreateInput = z.infer<typeof destinationGuideCreateSchema>;
+export const destinationGuideUpdateSchema = destinationGuideCreateSchema.partial();
+export type DestinationGuideUpdateInput = z.infer<typeof destinationGuideUpdateSchema>;

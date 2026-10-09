@@ -10,6 +10,7 @@ import {
 } from '@ttp/shared-types';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
+import { RevalidationService } from '../common/revalidation.service';
 
 export function slugify(text: string): string {
   return text
@@ -28,7 +29,10 @@ export function newBadgeToken(): string {
 
 @Injectable()
 export class OperatorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly revalidation: RevalidationService,
+  ) {}
 
   async list(query: OperatorListQuery): Promise<Paginated<Operator>> {
     const where: Prisma.OperatorWhereInput = {
@@ -83,7 +87,7 @@ export class OperatorsService {
   }
 
   async update(id: string, input: OperatorUpdateInput, admin: AdminUser): Promise<Operator> {
-    return this.prisma.$transaction(async (tx) => {
+    const operator = await this.prisma.$transaction(async (tx) => {
       const operator = await tx.operator.update({ where: { id }, data: input }).catch(mapPrismaError);
       await tx.auditLog.create({
         data: {
@@ -96,11 +100,13 @@ export class OperatorsService {
       });
       return operator;
     });
+    if (operator.status === 'APPROVED') this.revalidation.revalidate('operators');
+    return operator;
   }
 
   async decide(id: string, { decision, reason }: OperatorDecisionInput, admin: AdminUser): Promise<Operator> {
     const { from, to } = OPERATOR_TRANSITIONS[decision];
-    return this.prisma.$transaction(async (tx) => {
+    const operator = await this.prisma.$transaction(async (tx) => {
       // Conditional update: two moderators deciding at once can't both succeed.
       const { count } = await tx.operator.updateMany({
         where: { id, status: { in: [...from] } },
@@ -127,6 +133,9 @@ export class OperatorsService {
       });
       return tx.operator.findUniqueOrThrow({ where: { id } });
     });
+    // Approving or suspending changes the public site and every embedded badge.
+    this.revalidation.revalidate('operators');
+    return operator;
   }
 
   private async uniqueSlug(text: string): Promise<string> {

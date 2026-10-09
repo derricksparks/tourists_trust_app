@@ -43,6 +43,10 @@ export function DashboardPage() {
                 <span className="value">{data.reviewsPending}</span>
                 <span>Reviews to moderate</span>
               </Link>
+              <Link to="/inquiries" className={`tile ${data.inquiriesNew ? 'attention' : ''}`}>
+                <span className="value">{data.inquiriesNew}</span>
+                <span>Traveller questions to answer</span>
+              </Link>
             </div>
           </section>
 

@@ -1,0 +1,21 @@
+/* Inside Telegram, colours come from the user's Telegram theme (variables set by telegram-web-app.js). */
+body.tg {
+  background: var(--tg-theme-bg-color, var(--bg));
+  color: var(--tg-theme-text-color, var(--ink));
+  font-size: 16px;
+}
+body.tg .muted, body.tg .meta { color: var(--tg-theme-hint-color, var(--muted)); }
+body.tg a { color: var(--tg-theme-link-color, var(--seal)); }
+body.tg .card, body.tg .panel { background: var(--tg-theme-secondary-bg-color, var(--surface)); border-color: transparent; }
+body.tg .btn.primary { background: var(--tg-theme-button-color, var(--seal)); border-color: var(--tg-theme-button-color, var(--seal)); color: var(--tg-theme-button-text-color, var(--on-seal)); }
+.tg-main { padding: 16px 16px 32px; display: grid; gap: 18px; max-width: 640px; margin: 0 auto; }
+.tg-main h1 { font-size: 1.4rem; }
+.tg-main .cards { grid-template-columns: minmax(0, 1fr); }
+.field { display: grid; gap: 6px; }
+.field label { font-weight: 600; font-size: 0.92rem; }
+.field input, .field textarea, .field select { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--tg-theme-bg-color, var(--surface)); color: inherit; width: 100%; }
+.field textarea { min-height: 110px; resize: vertical; }
+.field .error { color: var(--danger); font-size: 0.88rem; }
+.consent { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; font-size: 0.9rem; align-items: start; }
+.consent input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--tg-theme-button-color, var(--seal)); }
+.done { text-align: center; display: grid; gap: 10px; justify-items: center; padding-block: 24px; }

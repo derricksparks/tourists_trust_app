@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { AdminUser, Prisma } from '@prisma/client';
 import { REVIEW_TRANSITIONS, ReviewDecisionInput, ReviewListQuery } from '@ttp/shared-types';
 import { PrismaService } from '../common/prisma.service';
+import { RevalidationService } from '../common/revalidation.service';
 
 const reviewInclude = {
   operator: { select: { id: true, name: true, slug: true, countryCode: true } },
@@ -12,7 +13,10 @@ const reviewInclude = {
 
 @Injectable()
 export class ReviewsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly revalidation: RevalidationService,
+  ) {}
 
   async list(query: ReviewListQuery) {
     const where: Prisma.ReviewWhereInput = { status: query.status };
@@ -31,7 +35,7 @@ export class ReviewsService {
 
   async decide(id: string, { decision, reason }: ReviewDecisionInput, admin: AdminUser) {
     const { from, to } = REVIEW_TRANSITIONS[decision];
-    return this.prisma.$transaction(async (tx) => {
+    const review = await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.review.updateMany({
         where: { id, status: { in: [...from] } },
         data: {
@@ -51,5 +55,7 @@ export class ReviewsService {
       });
       return tx.review.findUniqueOrThrow({ where: { id }, include: reviewInclude });
     });
+    this.revalidation.revalidate('operators');
+    return review;
   }
 }

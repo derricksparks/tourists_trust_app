@@ -249,3 +249,29 @@ These keep the meaning of the spec's fields but change how they are stored:
 | `AdminUser` (id, name, role) | adds `email`, `password_hash`, `active` | admin login |
 | `VisaGuide.country` | `country_code` (primary) + `covered_countries[]` | East African Tourist Visa spans KE/UG/RW |
 | `VisaGuide.requirements_ru` | + structured `checklist_items` | VI-2 checklist generator |
+
+---
+
+## Part C — Build notes by phase
+
+### Phase 1 (public site, badge, Telegram)
+
+- **No schema changes.** Every Phase 1 feature uses tables from the approved schema.
+- **Search:** with 10–15 operators, name search uses a simple case-insensitive match. Postgres full-text
+  search (B4) is deferred until the catalogue is large enough to need it.
+- **Inquiries:** tourists ask through the Mini App (signed Telegram data, consent recorded on
+  `telegram_users.consent_at`, max 5 an hour). Until the operator portal exists, staff forward the question
+  and send the operator's answer back through the bot from the admin inbox. That sets
+  `inquiries.first_response_at` (the input for response-time scoring, TV-6). The text sent is kept in the
+  audit log, since the schema has no reply column.
+- **Badge:** script embed renders in a shadow root (host CSS can't restyle it) and reads live status, so a
+  suspension shows "revoked" everywhere at once. Iframe fallback at `/badge/<token>`. Tested on a page served
+  from another origin with hostile CSS.
+- **Telegram:** official Bot API over HTTPS and Telegram's own `telegram-web-app.js`; no wrappers. The bot uses
+  long polling (one process per token); switch to a webhook when hosting allows. Telegram's servers were not
+  reachable from the build environment, so the bot and Mini App are tested against a local stand-in for the
+  Telegram API, with initData signed exactly as Telegram signs it.
+- **Site name:** "Проверено: Африка" is a working name; change it in `apps/web-content/app/(site)/layout.tsx`
+  and `public/badge.js`.
+- **Visa content:** the four seeded visa guides are published so the pages can be seen, but their text is
+  placeholder marked ДЕМО-ТЕКСТ. An editor must replace it with checked facts before launch.
