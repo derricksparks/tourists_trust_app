@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { TranslatorCard } from '@/components/TranslatorCard';
 import { publicApi, telegramAppLink } from '@/lib/api';
 import { countryRu } from '@/lib/format';
+import { loadCountries } from '@/lib/countries';
 
 export const metadata: Metadata = {
   title: 'Русскоговорящие гиды и переводчики в Уганде, Танзании и Кении',
@@ -12,9 +13,9 @@ export const metadata: Metadata = {
 };
 
 type Props = { searchParams: { country?: string; specialty?: string } };
-const COUNTRIES = ['UG', 'TZ', 'KE', 'RW'];
 
 export default async function TranslatorsPage({ searchParams }: Props) {
+  const COUNTRIES = (await loadCountries()).map((c) => c.code);
   const country = COUNTRIES.includes(searchParams.country?.toUpperCase() ?? '') ? searchParams.country!.toUpperCase() : undefined;
   const specialty = searchParams.specialty && searchParams.specialty in SPECIALTIES ? searchParams.specialty : undefined;
   const list = await publicApi.translators({ country, specialty });

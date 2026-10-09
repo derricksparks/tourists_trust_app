@@ -3,6 +3,7 @@ import { FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError, DmcFamTrip, InventoryItem, Listing } from '../api';
 import { useAuth } from '../auth';
+import { useCountries } from '../countries';
 import { COUNTRY_RU, dateRu, money, PUBLIC_SITE } from '../format';
 
 const ruMoney = (a: string, c: string) => money(a, c, 'ru-RU');
@@ -27,6 +28,7 @@ export function DmcPendingPage() {
 // ─── Inventory ───────────────────────────────────────────────────────────────
 
 export function InventoryPage() {
+  const countries = useCountries();
   const [country, setCountry] = useState<string | undefined>();
   const [month, setMonth] = useState('');
   const [q, setQ] = useState('');
@@ -46,7 +48,7 @@ export function InventoryPage() {
       <div className="row">
         <div className="chips" role="group" aria-label="Страна">
           <button className="chip" aria-pressed={!country} onClick={() => setCountry(undefined)}>Все страны</button>
-          {['UG', 'TZ', 'KE', 'RW'].map((c) => <button key={c} className="chip" aria-pressed={country === c} onClick={() => setCountry(c)}>{COUNTRY_RU[c]}</button>)}
+          {(countries.data ?? []).map((c) => <button key={c.code} className="chip" aria-pressed={country === c.code} onClick={() => setCountry(c.code)}>{c.nameRu}</button>)}
         </div>
         <label className="sr-only" htmlFor="month">Месяц заезда</label>
         <input id="month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }} />

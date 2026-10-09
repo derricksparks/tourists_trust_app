@@ -21,6 +21,8 @@ export function checkProductionConfig(env: NodeJS.ProcessEnv = process.env): str
     if (!env[name]?.startsWith('https://')) errors.push(`${name} must be the public https:// address`);
   }
   if (!env.REVALIDATE_SECRET || env.REVALIDATE_SECRET.startsWith('change-me')) errors.push('REVALIDATE_SECRET must be set to a random value');
+  // Operators' licence files are encrypted with it; losing it makes them unreadable.
+  if (!env.DOCUMENT_ENCRYPTION_KEY) errors.push('DOCUMENT_ENCRYPTION_KEY must be set (openssl rand -base64 32) and kept safe');
   if (errors.length) throw new Error(`Production settings are not ready:\n- ${errors.join('\n- ')}`);
   const warnings: string[] = [];
   if (!env.TELEGRAM_BOT_TOKEN) warnings.push('TELEGRAM_BOT_TOKEN is not set: Mini App sign-in and staff replies are off');

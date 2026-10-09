@@ -2,8 +2,10 @@ import { RequestForm } from '@/components/RequestForm';
 import { Stars, Tick } from '@/components/Seal';
 import { publicApi, SITE_URL } from '@/lib/api';
 import { count, countryRu, sinceRu } from '@/lib/format';
+import { loadCountries } from '@/lib/countries';
 
 export default async function TelegramOperator({ params }: { params: { slug: string } }) {
+  await loadCountries();
   const op = await publicApi.operator(params.slug);
   return (
     <>

@@ -235,3 +235,30 @@ test('a moderator confirms a DMC on a fam trip and sees late quotes', async ({ p
   await page.getByRole('link', { name: /^Quotes/ }).click();
   await expect(page.locator('tr', { hasText: 'Солнечный Путь (demo)' })).toContainText('Over 48 h');
 });
+
+test('a moderator opens and checks an applicant’s documents', async ({ page }) => {
+  await signIn(page, 'moderator@example.com');
+  await page.goto('/operators?status=FLAGGED');
+  await page.getByRole('link', { name: 'Rift Valley Trails (demo)' }).click();
+  await expect(page.getByRole('heading', { name: 'Documents' })).toBeVisible();
+  const popup = page.waitForEvent('popup');
+  await page.getByRole('button', { name: 'Open licence-demo.pdf' }).click();
+  await popup;
+  await page.getByLabel('What you found in licence-demo.pdf').fill('Matches the UTB register (e2e)');
+  await page.getByRole('button', { name: 'Mark checked' }).first().click();
+  await expect(page.getByText(/Checked .*: Matches the UTB register \(e2e\)/)).toBeVisible();
+  await expect(page.locator('ol.history')).toContainText('Document opened');
+});
+
+test('a super admin switches a new country on', async ({ page }) => {
+  await signIn(page, 'admin@example.com');
+  await page.getByRole('link', { name: 'Countries' }).click();
+  const zambia = page.locator('tr', { hasText: 'Zambia' });
+  await expect(zambia).toContainText('Off');
+  await page.getByRole('button', { name: 'Edit Zambia' }).click();
+  await page.getByLabel('Licensing authority').first().fill('Zambia Tourism Agency (demo)');
+  await page.getByLabel('Switched on (takes sign-ups, shown on the site)').first().check();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(zambia).toContainText('On');
+  await expect(zambia).toContainText('Zambia Tourism Agency (demo)');
+});

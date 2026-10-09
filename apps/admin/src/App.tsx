@@ -3,7 +3,9 @@ import { NavLink, Navigate, Outlet, Route, Routes, useLocation } from 'react-rou
 import { api } from './api';
 import { useAuth } from './auth';
 import { GuideFormPage, GuidesPage, VisaGuideFormPage, VisaGuidesPage } from './pages/ContentPages';
+import { CountriesPage } from './pages/CountriesPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { useCountries } from './countries';
 import { DmcsPage, FamTripPage, FamTripsPage, QuotesPage } from './pages/B2bPages';
 import { InquiriesPage } from './pages/InquiriesPage';
 import { InsurerFormPage, InsurersPage } from './pages/InsurerPages';
@@ -44,6 +46,7 @@ export function App() {
           <Route path="fam-trips" element={<FamTripsPage />} />
           <Route path="fam-trips/new" element={<FamTripPage />} />
           <Route path="fam-trips/:id" element={<FamTripPage />} />
+          <Route path="countries" element={<CountriesPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>
@@ -63,6 +66,7 @@ function Shell() {
   const { admin, logout } = useAuth();
   // Shared with the dashboard query, so the counts in the menu stay current.
   const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats });
+  useCountries(); // loads country names for every page
   const pendingOperators = stats.data?.operatorsByStatus.PENDING;
   const pendingReviews = stats.data?.reviewsPending;
   const newInquiries = stats.data?.inquiriesNew;
@@ -107,6 +111,7 @@ function Shell() {
           <NavLink to="/visa-guides">Visa guides</NavLink>
           <NavLink to="/guides">Travel guides</NavLink>
           <NavLink to="/insurers">Insurers</NavLink>
+          <NavLink to="/countries">Countries</NavLink>
         </nav>
         <div className="who">
           <span>

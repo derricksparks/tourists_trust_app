@@ -28,6 +28,12 @@ Pinned versions are deliberate; don't bump majors without asking.
   Set-password links are signed JWTs bound to a fingerprint of the current password hash (no DB column), so they
   stop working once used. Operator scores (TV-6) come from `ScoringService`; recompute after anything that changes
   response times or listing completeness.
+- Operator self-onboarding (Phase 4): `services/api/src/portal/onboarding.module.ts`. Operators sign up as `DRAFT` and
+  submit with `OPERATOR_SUBMIT` (shared-types); `applicationMissing()` decides what is still needed. Documents go
+  through `DocumentStore` (`src/storage`), AES-256-GCM on disk, key `DOCUMENT_ENCRYPTION_KEY`; never serve them publicly.
+- Tour feed (Phase 4): `src/feed` (`/feed/v1`, API keys stored as sha256, CSV import). Feed, CSV and form must follow the same
+  publish rules (`FeedService.targetStatus`). Countries are data (`countries.active`); check new country input with
+  `activeCountry()` instead of hard-coding codes.
 - Email: `NotificationsService` (`services/api/src/mail`) decides who is told what (EN operators/staff, RU DMCs) over
   `MailService` (SMTP via `SMTP_URL`; without it messages are only logged and kept in `MailService.sent`, which tests read).
   Notify after the action succeeds; never let an email failure undo it.

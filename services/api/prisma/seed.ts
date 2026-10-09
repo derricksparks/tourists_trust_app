@@ -9,12 +9,37 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../src/common/prisma.service';
 import { REFERENCE_COUNTRIES } from '../src/common/countries';
 import { ScoringService } from '../src/scoring/scoring.service';
+import { DocumentStore } from '../src/storage/document-store';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'crypto';
+import { rmSync } from 'fs';
+import { join, resolve } from 'path';
 
 const prisma = new PrismaClient();
 const token = () => randomBytes(32).toString('base64url');
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
+/** A one-page PDF showing one line of text (demo documents). */
+function demoPdf(text: string): Buffer {
+  const safe = text.replace(/[()\\]/g, '');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${31 + safe.length} >>\nstream\nBT /F1 14 Tf 60 780 Td (${safe}) Tj ET\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let body = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  objects.forEach((o, i) => {
+    offsets.push(body.length);
+    body += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = body.length;
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(body, 'latin1');
+}
+
 /** Demo package-feed key (development only). */
 const DEMO_FEED_KEY = 'ttp_demo_0000000000000000000000000000000000000000';
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
@@ -24,6 +49,8 @@ async function wipe() {
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
   const list = tables.map((t) => `"${t.tablename}"`).join(', ');
   if (list) await prisma.$executeRawUnsafe(`TRUNCATE ${list} CASCADE`);
+  // Their uploaded files go too (development folder only; the seed never runs in production).
+  rmSync(join(resolve(process.env.UPLOAD_DIR ?? 'uploads'), 'documents'), { recursive: true, force: true });
 }
 
 async function main() {
@@ -141,9 +168,23 @@ async function main() {
     })),
   });
 
-  await prisma.operatorDocument.create({
-    data: { operatorId: pearl.id, type: 'TOURISM_LICENSE', storageKey: 'demo/pearl/licence.pdf', originalFilename: 'licence.pdf', contentType: 'application/pdf', sizeBytes: 48213, reviewedById: moderator.id, reviewedAt: approvedAt, reviewNotes: 'Matches UTB registry (demo).' },
-  });
+  // Real (tiny, fictional) PDFs, encrypted into UPLOAD_DIR like uploads, so "Open" works in the dashboard.
+  const store = new DocumentStore();
+  const demoDoc = async (operatorId: string, name: string, type: 'TOURISM_LICENSE' | 'BUSINESS_REGISTRATION', reviewed?: string) => {
+    const pdf = demoPdf(`${type === 'TOURISM_LICENSE' ? 'Tourism licence' : 'Business registration'} - ${name} - FICTIONAL DEMO DOCUMENT`);
+    await prisma.operatorDocument.create({
+      data: {
+        operatorId, type, storageKey: await store.put(`documents/${operatorId}`, pdf), originalFilename: `${type === 'TOURISM_LICENSE' ? 'licence' : 'registration'}-demo.pdf`,
+        contentType: 'application/pdf', sizeBytes: pdf.length,
+        ...(reviewed && { reviewedById: moderator.id, reviewedAt: approvedAt, reviewNotes: reviewed }),
+      },
+    });
+  };
+  await demoDoc(pearl.id, 'Pearl Gorilla Treks', 'TOURISM_LICENSE', 'Matches UTB registry (demo).');
+  for (const o of await prisma.operator.findMany({ where: { status: { in: ['PENDING', 'FLAGGED'] } } })) {
+    await demoDoc(o.id, o.name, 'TOURISM_LICENSE');
+    await demoDoc(o.id, o.name, 'BUSINESS_REGISTRATION');
+  }
   await prisma.media.create({
     data: { operatorId: pearl.id, kind: 'VIDEO', externalUrl: 'https://www.youtube.com/watch?v=demo1', captionRu: 'Наш офис и автомобили (демо)', status: 'APPROVED' },
   });

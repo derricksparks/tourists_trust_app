@@ -17,10 +17,10 @@ import { api, ApiError, DestinationGuide, VisaGuide } from '../api';
 import { useCanEditContent } from '../auth';
 import { StatusPill } from '../components/StatusPill';
 import { countryName, formatDate } from '../format';
+import { useActiveCountryCodes } from '../countries';
 
 const PUBLIC_SITE = (import.meta.env.VITE_PUBLIC_SITE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 const KIND_LABEL: Record<GuideKind, string> = { DESTINATION: 'What to see', LOGISTICS: 'How to get there' };
-const OPERATOR_COUNTRIES = ['UG', 'TZ', 'KE', 'RW'];
 
 // ─── Lists ───────────────────────────────────────────────────────────────────
 
@@ -218,6 +218,7 @@ const slugHint = 'The web address: lowercase latin letters, digits and hyphens, 
 const emptyVisa = { slug: '', countryCode: 'UG', coveredCountries: ['UG'], visaType: '', titleRu: '', requirementsRu: '', checklistItems: [] as ChecklistItem[], officialUrl: '', feeInfo: '', processingTime: '', status: 'DRAFT' as ContentStatus };
 
 export function VisaGuideFormPage() {
+  const OPERATOR_COUNTRIES = useActiveCountryCodes();
   const { id } = useParams();
   const editing = !!id;
   const navigate = useNavigate();
@@ -350,6 +351,7 @@ export function VisaGuideFormPage() {
 const emptyGuide = { slug: '', countryCode: 'UG', kind: 'LOGISTICS' as GuideKind, titleRu: '', summaryRu: '', bodyRu: '', status: 'DRAFT' as ContentStatus };
 
 export function GuideFormPage() {
+  const OPERATOR_COUNTRIES = useActiveCountryCodes();
   const { id } = useParams();
   const editing = !!id;
   const navigate = useNavigate();

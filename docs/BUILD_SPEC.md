@@ -251,12 +251,12 @@ These keep the meaning of the spec's fields but change how they are stored:
 | `VisaGuide.requirements_ru` | + structured `checklist_items` | VI-2 checklist generator |
 | *(Phase 2, approved 2026-10-09)* `Translator` | + `telegram_user_id` (unique, nullable) | translators sign up and get job offers in the bot |
 | *(Phase 2, approved 2026-10-09)* `ReviewInvite` | + `inquiry_id` (unique, nullable) | invite the traveller who asked through the bot; one invite per inquiry |
-| *(Phase 4, proposed)* `Operator.status` | + `DRAFT` | an operator who signed up on the portal but hasn't sent the application; never in the review queue or public |
-| *(Phase 4, proposed)* `Operator` | + `submitted_at` | queue order and "waiting since"; set on submit and resubmit (existing rows: `created_at`) |
-| *(Phase 4, proposed)* `OperatorDocument` | + `content_type`, `size_bytes` (PDF/JPEG/PNG only, CHECK) | operators upload their licence and registration; staff download them |
-| *(Phase 4, proposed)* `Package` | + `external_ref`, unique per operator (CHECK on format) | the operator's own id, so spreadsheet re-imports and the feed API update instead of duplicating |
-| *(Phase 4, proposed)* new `api_keys` | operator, name, prefix, sha256 hash, last used, revoked | package feed API (B2B-1 "API later"); the key itself is shown once and never stored |
-| *(Phase 4, proposed)* `Country` | + `name_ru_in`, `active`, `licensing_authority`, `licence_register_url`, `created_at` | countries are added and switched on by staff instead of being hard-coded; Russian page titles need the locative ("в Уганде") |
+| *(Phase 4, approved 2026-10-10)* `Operator.status` | + `DRAFT` | an operator who signed up on the portal but hasn't sent the application; never in the review queue or public |
+| *(Phase 4, approved 2026-10-10)* `Operator` | + `submitted_at` | queue order and "waiting since"; set on submit and resubmit (existing rows: `created_at`) |
+| *(Phase 4, approved 2026-10-10)* `OperatorDocument` | + `content_type`, `size_bytes` (PDF/JPEG/PNG only, CHECK) | operators upload their licence and registration; staff download them |
+| *(Phase 4, approved 2026-10-10)* `Package` | + `external_ref`, unique per operator (CHECK on format) | the operator's own id, so spreadsheet re-imports and the feed API update instead of duplicating |
+| *(Phase 4, approved 2026-10-10)* new `api_keys` | operator, name, prefix, sha256 hash, last used, revoked | package feed API (B2B-1 "API later"); the key itself is shown once and never stored |
+| *(Phase 4, approved 2026-10-10)* `Country` | + `name_ru_in`, `active`, `licensing_authority`, `licence_register_url`, `created_at` | countries are added and switched on by staff instead of being hard-coded; Russian page titles need the locative ("в Уганде") |
 
 ---
 
@@ -350,3 +350,35 @@ No schema changes.
   creates the first admin and the country list on an empty database.
 - The bot username for the site moved from build-time `NEXT_PUBLIC_TELEGRAM_BOT` to runtime
   `TELEGRAM_BOT_USERNAME`, so one image serves any bot.
+
+### Phase 4 (self-serve and scale)
+
+Schema changes approved 2026-10-10 (B6). Decisions: documents are encrypted on our own server; operators
+can prepare draft tours while their application is waiting.
+
+- **Self-onboarding (TV-1, TV-2, DI-2):** `/apply` in the portal creates a `DRAFT` operator and its login. The
+  operator fills in the intake, uploads documents and submits (`OPERATOR_SUBMIT`: DRAFT/FLAGGED → PENDING). The
+  application is locked while staff review it. A flag reopens it with the reason shown, and the operator sends it
+  again. Staff decisions are unchanged and are now emailed to the operator. Approval is still required before
+  anything is public. Requirements to submit: `applicationMissing()` in shared-types (registration and licence
+  numbers, authority, address, year, a reference, email, a licence copy, a registration copy). Five sign-up
+  attempts per hour per IP address.
+- **Documents (B3.5):** PDF/JPEG/PNG only, recognised by their first bytes; up to 10 MB each and 10 per operator.
+  They are encrypted with AES-256-GCM (`DOCUMENT_ENCRYPTION_KEY`) into `UPLOAD_DIR`, and are never public. Only
+  moderators and super admins open them, and each opening is recorded in the operator's history. Staff note what
+  they checked ("Mark checked"), after which the operator can no longer remove that document.
+- **Package feed (B2B-1 "API later"):** `/feed/v1/packages/{external_ref}` with `PUT` (create or replace),
+  `GET` and `DELETE` (archive), authenticated by per-operator keys. Only a sha256 hash of each key is stored, at
+  most 5 active keys per operator, and each key is limited to 120 requests a minute. Spreadsheet import in the
+  portal uses the same rules: a dry run first, then an all-or-nothing import. Publishing needs an approved
+  operator and a Russian description, as in the form; otherwise the tour stays a draft and a warning says why.
+  Reference: `docs/FEED_API.md`.
+- **More countries:** countries are rows staff manage (super admins), with Russian names including the "в …"
+  form, the licensing authority, the licence register link and an on/off switch. Only switched-on countries take
+  operator sign-ups, new tours and translator sign-ups. The public site lists switched-on countries, plus any
+  switched off later that still have listed operators. Country lists in the site, Mini App, dashboard and portal
+  now come from the API. Country changes are not in the audit log, because its `entity_id` is a UUID and
+  countries are keyed by ISO code.
+- **Not built:** automatic licence checks against the authorities' registers (staff open the register link),
+  photo uploads for tours, and a staff-user management screen (staff logins still come from `cli/setup.js`).
+

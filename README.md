@@ -6,6 +6,7 @@ connector between African tour operators and Russian DMCs. There is **no payment
 - Requirements, review and decisions: [`docs/BUILD_SPEC.md`](docs/BUILD_SPEC.md)
 - Data model: [`services/api/prisma/schema.prisma`](services/api/prisma/schema.prisma)
 - Hosting and email for the pilot: [`docs/DEPLOY.md`](docs/DEPLOY.md)
+- Tour feed API for operators: [`docs/FEED_API.md`](docs/FEED_API.md)
 
 ## Layout
 
@@ -38,7 +39,7 @@ pnpm dev:portal                              # partner portal on http://localhos
 ```
 
 Portal demo sign-ins (same password): `operator@example.com` (Pearl Gorilla Treks), `dmc@example.com`
-(approved DMC), `dmc-pending@example.com` (DMC waiting for approval). Russian DMCs can also apply at `/signup`.
+(approved DMC), `dmc-pending@example.com` (DMC waiting for approval). Phase 4: `applicant@example.com` (operator who signed up, application not sent), `flagged@example.com` (operator asked for more information). Russian DMCs can also apply at `/signup`.
 New operator logins are created on the operator's page in the dashboard. The partner is emailed a
 one-time set-password link, and staff also see it to pass on. Partners can reset a forgotten password
 from the portal sign-in page. In development (no `SMTP_URL`) emails are written to the API log instead.
@@ -104,4 +105,9 @@ Dashboard: DMC approval, portal logins, fam-trip planner, quote overview with 48
 requests and answers, DMC applications and decisions, fam trips), and a one-server production setup
 (Docker Compose, automatic HTTPS, nightly backups, first-admin command). See [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
-Next: Phase 4 (operator self-onboarding, API-based package feed, more countries).
+**Phase 4 done** — operators apply on their own at `/apply` in the portal: they fill in the licence
+details, upload licence and registration (PDF/JPEG/PNG, encrypted on the server), and send the application;
+staff open and check the documents and decide as before, and everyone is emailed. While waiting, operators
+can prepare tours as drafts. Tours can also arrive by spreadsheet (CSV, checked before import) or through the
+feed API with per-operator keys ([`docs/FEED_API.md`](docs/FEED_API.md)). Countries are managed in the
+dashboard (licensing authority, licence register link, on/off) instead of being fixed in code.

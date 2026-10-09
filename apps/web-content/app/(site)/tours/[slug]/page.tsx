@@ -3,10 +3,12 @@ import Link from 'next/link';
 import { Stars, Tick } from '@/components/Seal';
 import { publicApi, SITE_URL, telegramLink } from '@/lib/api';
 import { count, countryRuIn, dateRangeRu, priceRu, sinceRu } from '@/lib/format';
+import { loadCountries } from '@/lib/countries';
 
 type Props = { params: { slug: string } };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  await loadCountries();
   const p = await publicApi.package(params.slug);
   const title = `${p.titleRu ?? p.title}: ${count(p.durationDays, ['день', 'дня', 'дней'])} ${countryRuIn(p.operator.countryCode)}`;
   return { title, description: p.descriptionRu ?? undefined, alternates: { canonical: `/tours/${p.slug}` } };
@@ -22,6 +24,7 @@ const INCLUSIONS: Record<string, string> = {
  * to the operator's own site and to the Russian travel companies that sell it.
  */
 export default async function TourPage({ params }: Props) {
+  await loadCountries();
   const p = await publicApi.package(params.slug);
   const op = p.operator;
   const price = priceRu(p.price, p.currency, p.priceBasis);

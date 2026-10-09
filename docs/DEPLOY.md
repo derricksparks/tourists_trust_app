@@ -10,7 +10,8 @@ internet ──443──▶ proxy (Caddy, automatic HTTPS)
                   api  (NestJS; runs database migrations on start)
                   bot  (Telegram long polling)
                   db   (PostgreSQL 16, data in a Docker volume)
-                  backup (nightly pg_dump into infra/production/backups, kept 14 days)
+                  uploads volume (operators' licence files, encrypted with DOCUMENT_ENCRYPTION_KEY)
+                  backup (nightly pg_dump + uploads archive into infra/production/backups, kept 14 days)
 ```
 
 Email goes out over SMTP through whichever email provider you choose. Nothing is tied to one host
@@ -120,7 +121,9 @@ docker compose logs api | tail    # look for "API listening" and any "Warning:" 
 ```
 
 The API refuses to start in production if a secret is missing or too short, or if an address isn't
-`https://`. It warns, but still starts, if Telegram, email or `STAFF_EMAILS` is not set up.
+`https://`. `DOCUMENT_ENCRYPTION_KEY` encrypts the licence and registration files operators upload. **Keep a
+copy of it outside the server** (e.g. in your password manager): without it, those files and their backups
+can't be opened. It warns, but still starts, if Telegram, email or `STAFF_EMAILS` is not set up.
 
 **Create the first staff login.** This also adds the country list. Never run the demo seed on this
 server; it refuses to in production anyway.
@@ -154,6 +157,10 @@ locked out.
 - [ ] In Telegram, open the bot, start the Mini App and send a test question. It should appear under
       Inquiries.
 - [ ] Paste one operator's badge code into a test page on another site and check it shows "Verified".
+- [ ] Countries (dashboard → Countries): check each destination's licensing authority and add the link to its
+      licence register, so reviewers can check licence numbers.
+- [ ] Tell operators where to apply: `https://partners.example.org/apply`. Their applications arrive in the
+      approval queue, and staff are emailed.
 - [ ] Replace the placeholder content: site name, visa guides (still drafts until checked against
       official sources) and insurer details. The site needs a privacy policy before collecting
       travellers' contacts.
@@ -175,8 +182,9 @@ cd infra/production && docker compose up -d --build
 
 ## 8. Backups
 
-The `backup` service writes `infra/production/backups/ttp-<date>.dump` every 24 hours, plus one when
-it starts, and deletes dumps older than 14 days. **They are on the same server**, so also:
+The `backup` service writes `infra/production/backups/ttp-<date>.dump` (database) and
+`uploads-<date>.tar.gz` (operators' documents, still encrypted) every 24 hours, plus one set when it starts,
+and deletes files older than 14 days. **They are on the same server**, so also:
 
 - turn on your VPS provider's automatic server backups or snapshots, if it offers them; and
 - copy the dumps somewhere else regularly, e.g. from your own computer:
@@ -190,6 +198,8 @@ docker compose stop api web bot
 docker compose exec db dropdb -U ttp ttp
 docker compose exec db createdb -U ttp ttp
 docker compose exec -T db pg_restore -U ttp -d ttp --no-owner < backups/ttp-2026-10-09T0300.dump
+# documents from the same night (needs the same DOCUMENT_ENCRYPTION_KEY in .env)
+docker compose run --rm -T --entrypoint sh -v ./backups:/backups api -c 'tar -xzf /backups/uploads-2026-10-09T0300.tar.gz -C /data/uploads'
 docker compose start api web bot
 ```
 

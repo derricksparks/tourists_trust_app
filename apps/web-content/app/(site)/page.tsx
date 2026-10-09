@@ -3,9 +3,10 @@ import { OperatorCard } from '@/components/OperatorCard';
 import { Seal } from '@/components/Seal';
 import { publicApi, telegramLink } from '@/lib/api';
 import { count, countryRuIn } from '@/lib/format';
+import { destinationsLine, loadCountries } from '@/lib/countries';
 
 export default async function HomePage() {
-  const [countries, operators, visas] = await Promise.all([publicApi.countries(), publicApi.operators(), publicApi.visaGuides()]);
+  const [countries, operators, visas] = await Promise.all([loadCountries(), publicApi.operators(), publicApi.visaGuides()]);
   const total = countries.reduce((a, c) => a + c.operatorCount, 0);
   const featured = [...operators].sort((a, b) => b.reviewCount - a.reviewCount).slice(0, 6);
 
@@ -13,7 +14,7 @@ export default async function HomePage() {
     <div className="page">
       <section className="hero">
         <div className="stack" style={{ gap: 20 }}>
-          <span className="eyebrow">Уганда · Танзания · Кения</span>
+          <span className="eyebrow">{destinationsLine(countries)}</span>
           <h1>Туроператоры Восточной Африки, которых мы проверили сами</h1>
           <p className="lead">
             Лицензия, регистрация компании, видео офиса и машин, отзывы только от тех, кто реально съездил. Всё на русском — и без

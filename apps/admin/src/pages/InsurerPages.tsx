@@ -6,8 +6,8 @@ import { api, ApiError, Insurer } from '../api';
 import { useCanEditContent } from '../auth';
 import { StatusPill } from '../components/StatusPill';
 import { countryName, formatDate } from '../format';
+import { useActiveCountryCodes } from '../countries';
 
-const COUNTRIES = ['UG', 'TZ', 'KE', 'RW'];
 const PUBLIC_SITE = (import.meta.env.VITE_PUBLIC_SITE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
 /** Insurer comparison data (IN-1, IN-2), kept by content editors after calling each insurer. */
@@ -60,6 +60,7 @@ export function InsurersPage() {
 const empty = { name: '', nameRu: '', websiteUrl: '', countriesCovered: ['UG', 'TZ', 'KE'], claimsContact: '', repatriationConfirmed: false, coverageRu: '', exclusionsRu: '', medicalLimitInfo: '', notes: '', published: false };
 
 export function InsurerFormPage() {
+  const COUNTRIES = useActiveCountryCodes();
   const { id } = useParams();
   const editing = !!id;
   const canEdit = useCanEditContent();

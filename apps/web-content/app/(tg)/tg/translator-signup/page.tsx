@@ -1,10 +1,10 @@
 'use client';
 
 import { LANGUAGES, PROFICIENCY_LEVELS, SPECIALTIES } from '@ttp/shared-types';
-import { FormEvent, useState } from 'react';
+import type { PublicCountry } from '@ttp/shared-types';
+import { FormEvent, useEffect, useState } from 'react';
 import { postAsTelegramUser, useTelegram } from '@/lib/useTelegram';
 
-const COUNTRIES: [string, string][] = [['UG', 'Уганда'], ['TZ', 'Танзания'], ['KE', 'Кения'], ['RW', 'Руанда']];
 const LEVEL_LABEL: Record<string, string> = { native: 'родной' };
 
 /** Translator / guide sign-up (TR-1). Self-reported levels; staff spot-check before the profile is listed. */
@@ -20,6 +20,15 @@ export default function TranslatorSignup() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [countries, setCountries] = useState<PublicCountry[]>([]);
+
+  // Destinations staff have switched on (Phase 4).
+  useEffect(() => {
+    fetch('/backend/public/countries')
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setCountries)
+      .catch(() => undefined);
+  }, []);
 
   const languages = Object.keys(levels);
   const toggleLang = (l: string) =>
@@ -94,7 +103,7 @@ export default function TranslatorSignup() {
         <div className="field">
           <label htmlFor="country">Где работаете</label>
           <select id="country" value={country} onChange={(e) => setCountry(e.target.value)}>
-            {COUNTRIES.map(([c, n]) => <option key={c} value={c}>{n}</option>)}
+            {(countries.length ? countries : [{ code: 'UG', nameRu: 'Уганда' }]).map((c) => <option key={c.code} value={c.code}>{c.nameRu}</option>)}
           </select>
         </div>
         <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>

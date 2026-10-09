@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { OPERATOR_TRANSITIONS, OperatorDecision } from '@ttp/shared-types';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, ApiError } from '../api';
+import { api, ApiError, OperatorDocument } from '../api';
 import { useCanModerate } from '../auth';
 import { DecisionOption, DecisionPanel } from '../components/DecisionPanel';
 import { ReviewInvitesPanel } from '../components/ReviewInvites';
@@ -28,6 +28,7 @@ const OPTIONS: Record<OperatorDecision, DecisionOption<OperatorDecision>> = {
 };
 
 const NEXT_STEP: Record<string, string> = {
+  DRAFT: 'Signed up on the portal but hasn’t sent the application yet. Nothing to decide until they do.',
   PENDING: 'Check the licence and registration with the licensing authority, then decide.',
   FLAGGED: 'Waiting on a follow-up. Approve or reject once it is resolved.',
   APPROVED: 'Live. Suspend if the licence lapses or a serious complaint is confirmed.',
@@ -87,6 +88,7 @@ export function OperatorDetailPage() {
           )}
         </div>
         <p className="muted mono">/operators/{op.slug}</p>
+        {op.submittedAt && op.status === 'PENDING' && <p className="muted">Waiting since {formatDateTime(op.submittedAt)}</p>}
       </header>
 
       <div className="detail-grid">
@@ -139,23 +141,7 @@ export function OperatorDetailPage() {
             </dl>
           </section>
 
-          <section className="panel" aria-labelledby="docs">
-            <h2 id="docs">Documents</h2>
-            {op.documents.length ? (
-              <ul className="history">
-                {op.documents.map((d) => (
-                  <li key={d.id}>
-                    <span>
-                      {d.originalFilename} <span className="muted">· {d.type.replace('_', ' ').toLowerCase()}</span>
-                    </span>
-                    {d.reviewNotes && <span className="muted">{d.reviewNotes}</span>}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="muted">No documents uploaded. Uploads arrive with the operator portal; until then, record what you checked in the decision reason.</p>
-            )}
-          </section>
+          <DocumentsPanel operatorId={op.id} documents={op.documents} registerUrl={op.country.licenceRegisterUrl} canModerate={canModerate} />
         </div>
 
         <div className="stack">
@@ -246,6 +232,54 @@ function BadgeCode({ token, status }: { token: string; status: string }) {
         <button className="btn" type="button" onClick={copy}>{copied ? 'Copied' : 'Copy code'}</button>
         <span className="muted" style={{ fontSize: '0.84rem' }}>Currently shows: {status === 'APPROVED' ? 'Verified' : status === 'SUSPENDED' ? 'Verification revoked' : 'Not verified'}</span>
       </div>
+    </section>
+  );
+}
+
+const DOC_TYPE: Record<string, string> = { TOURISM_LICENSE: 'Tourism licence', BUSINESS_REGISTRATION: 'Business registration', OTHER: 'Other' };
+
+/** Uploaded licence and registration (encrypted at rest; opening one is recorded in the history). */
+function DocumentsPanel({ operatorId, documents, registerUrl, canModerate }: { operatorId: string; documents: OperatorDocument[]; registerUrl: string | null; canModerate: boolean }) {
+  const queryClient = useQueryClient();
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const review = useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) => api.reviewDocument(operatorId, id, text),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['operator', operatorId] }),
+    onError: (e) => setError(e instanceof ApiError ? e.message : 'Could not save the note.'),
+  });
+  const open = (id: string) => {
+    setError(null);
+    api.openDocument(operatorId, id).then(() => queryClient.invalidateQueries({ queryKey: ['operator', operatorId] })).catch((e: Error) => setError(e.message));
+  };
+  return (
+    <section className="panel" aria-labelledby="docs">
+      <div className="spread">
+        <h2 id="docs">Documents</h2>
+        {registerUrl && <a href={registerUrl} target="_blank" rel="noopener noreferrer">Check the licence register</a>}
+      </div>
+      {documents.length === 0 && <p className="muted">No documents uploaded. Operators upload them from the partner portal; for operators you entered yourself, record what you checked in the decision reason.</p>}
+      <ul className="doclist">
+        {documents.map((d) => (
+          <li key={d.id}>
+            <span>
+              <strong>{DOC_TYPE[d.type] ?? d.type}</strong> <span className="muted">· {d.originalFilename} · {formatDate(d.createdAt)}</span>
+            </span>
+            {canModerate && <button className="btn link" style={{ justifySelf: 'start' }} onClick={() => open(d.id)} aria-label={`Open ${d.originalFilename}`}>Open</button>}
+            {d.reviewedAt ? (
+              <span className="muted">Checked {formatDate(d.reviewedAt)}{d.reviewNotes ? `: ${d.reviewNotes}` : ''}</span>
+            ) : (
+              canModerate && (
+                <form className="row-wrap" onSubmit={(e) => { e.preventDefault(); review.mutate({ id: d.id, text: notes[d.id] ?? '' }); }}>
+                  <input aria-label={`What you found in ${d.originalFilename}`} placeholder="e.g. Matches the register" value={notes[d.id] ?? ''} onChange={(e) => setNotes((p) => ({ ...p, [d.id]: e.target.value }))} style={{ flex: 1, minWidth: 180 }} />
+                  <button className="btn" type="submit" disabled={(notes[d.id] ?? '').trim().length < 2}>Mark checked</button>
+                </form>
+              )
+            )}
+          </li>
+        ))}
+      </ul>
+      {error && <p className="alert err" role="alert">{error}</p>}
     </section>
   );
 }

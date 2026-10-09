@@ -4,6 +4,7 @@ import { api } from './api';
 import { useAuth } from './auth';
 import { DmcFamTripsPage, DmcListingsPage, DmcPendingPage, DmcQuotesPage, InventoryPage } from './pages/Dmc';
 import { ForgotPasswordPage, LoginPage, SetPasswordPage, SignupPage } from './pages/Public';
+import { ApplicationPage, IntegrationsPage, OperatorSignupPage } from './pages/Onboarding';
 import { OperatorFamTripsPage, OperatorOverviewPage, OperatorQuotesPage, PackageFormPage, PackagesPage } from './pages/Operator';
 
 export function App() {
@@ -14,15 +15,19 @@ export function App() {
       <Route path="/set-password" element={<SetPasswordPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route path="/apply" element={<OperatorSignupPage />} />
       <Route element={<RequireAuth />}>
         {account?.role === 'OPERATOR' && (
           <Route element={<OperatorShell />}>
-            <Route index element={<OperatorOverviewPage />} />
+            {/* Until approved, the application is the home page; quotes and fam trips come with approval. */}
+            <Route index element={account.operator?.status === 'APPROVED' ? <OperatorOverviewPage /> : <Navigate to="/application" replace />} />
+            <Route path="application" element={<ApplicationPage />} />
             <Route path="packages" element={<PackagesPage />} />
             <Route path="packages/new" element={<PackageFormPage />} />
             <Route path="packages/:id" element={<PackageFormPage />} />
-            <Route path="quotes" element={<OperatorQuotesPage />} />
-            <Route path="fam-trips" element={<OperatorFamTripsPage />} />
+            <Route path="integrations" element={<IntegrationsPage />} />
+            {account.operator?.status === 'APPROVED' && <Route path="quotes" element={<OperatorQuotesPage />} />}
+            {account.operator?.status === 'APPROVED' && <Route path="fam-trips" element={<OperatorFamTripsPage />} />}
           </Route>
         )}
         {account?.role === 'DMC' && (
@@ -66,7 +71,8 @@ function Who({ label, signOut }: { label: string; signOut: string }) {
 
 function OperatorShell() {
   const { account } = useAuth();
-  const overview = useQuery({ queryKey: ['overview'], queryFn: api.overview });
+  const approved = account?.operator?.status === 'APPROVED';
+  const overview = useQuery({ queryKey: ['overview'], queryFn: api.overview, enabled: approved });
   const open = overview.data?.openQuotes;
   return (
     <div lang="en">
@@ -74,10 +80,12 @@ function OperatorShell() {
         <div className="inner">
           <div className="brand"><strong>{account?.operator?.name}</strong><span className="eyebrow">Operator portal</span></div>
           <nav className="nav" aria-label="Main">
-            <NavLink to="/" end>Overview</NavLink>
+            {approved ? <NavLink to="/" end>Overview</NavLink> : <NavLink to="/application">Application</NavLink>}
             <NavLink to="/packages">Tours</NavLink>
-            <NavLink to="/quotes">Quote requests {!!open && <span className="count" aria-label={`${open} open`}>{open}</span>}</NavLink>
-            <NavLink to="/fam-trips">Fam trips</NavLink>
+            {approved && <NavLink to="/quotes">Quote requests {!!open && <span className="count" aria-label={`${open} open`}>{open}</span>}</NavLink>}
+            {approved && <NavLink to="/fam-trips">Fam trips</NavLink>}
+            <NavLink to="/integrations">Integrations</NavLink>
+            {approved && <NavLink to="/application">Verification</NavLink>}
           </nav>
           <Who label="Sign out" signOut="Sign out" />
         </div>

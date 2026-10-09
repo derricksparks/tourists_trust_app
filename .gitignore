@@ -8,3 +8,4 @@ playwright-report/
 .env.local
 .next/
 *.tsbuildinfo
+uploads/

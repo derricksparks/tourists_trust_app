@@ -50,6 +50,37 @@ export class NotificationsService {
     await this.mail.send({ to: [account.email], subject, text });
   }
 
+  /** A self-registered operator sent its application (or answered staff's follow-up). */
+  operatorApplied(operatorId: string, resubmitted: boolean): void {
+    this.run('operatorApplied', async () => {
+      const op = await this.prisma.operator.findUniqueOrThrow({ where: { id: operatorId }, include: { country: true } });
+      this.mail.notify({
+        to: this.mail.staffRecipients(),
+        subject: `${resubmitted ? 'Operator answered your follow-up' : 'New operator application'}: ${op.name} (${op.country.nameEn})`,
+        text: `${op.name} ${resubmitted ? 'updated its application after it was flagged' : 'applied to be listed'}.\n\nLicence: ${op.tourismBoardLicense} (${op.licensingAuthority})${op.country.licenceRegisterUrl ? `\nCheck it here: ${op.country.licenceRegisterUrl}` : ''}\n\nReview: ${adminUrl()}/operators/${op.id}`,
+      });
+      this.mail.notify({
+        to: await this.operatorLogins(operatorId),
+        subject: 'We received your application',
+        text: `Hello,\n\nThank you. ${op.name}'s application is now with our team. We check the licence and registration with ${op.licensingAuthority} and may contact your reference. This usually takes a few working days; we will email you the outcome.\n\nMeanwhile you can prepare your tours as drafts: ${portalUrl()}/packages${SIGN_EN}`,
+      });
+    });
+  }
+
+  operatorDecided(operatorId: string, decision: 'approve' | 'flag' | 'reject' | 'suspend', reason?: string): void {
+    this.run('operatorDecided', async () => {
+      const op = await this.prisma.operator.findUniqueOrThrow({ where: { id: operatorId } });
+      const why = reason ? `\n\nOur note: ${reason}` : '';
+      const body = {
+        approve: { subject: `${op.name} is now verified and listed`, text: `${op.name} passed our checks and is now listed on the Russian-language site, with your verification page and badge. Publish your tours so Russian travel companies can request prices: ${portalUrl()}/packages\n\nYour badge code for your own website is in the portal.` },
+        flag: { subject: 'We need more information for your application', text: `We need something more before we can approve ${op.name}.${why}\n\nUpdate your application and send it again: ${portalUrl()}/application` },
+        reject: { subject: 'Your application was not approved', text: `We could not approve ${op.name}.${why}\n\nIf you think this is a mistake, reply to this email.` },
+        suspend: { subject: `${op.name}'s listing is suspended`, text: `${op.name}'s listing is suspended and your badge now shows "verification revoked".${why}\n\nReply to this email to resolve it.` },
+      }[decision];
+      this.mail.notify({ to: await this.operatorLogins(operatorId), subject: body.subject, text: `Hello,\n\n${body.text}${SIGN_EN}` });
+    });
+  }
+
   dmcApplied(dmc: { id: string; name: string; contactName: string | null; email: string | null; websiteUrl: string | null }) {
     this.mail.notify({
       to: this.mail.staffRecipients(),

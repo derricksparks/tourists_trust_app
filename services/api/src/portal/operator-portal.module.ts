@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { PackageStatus } from '@prisma/client';
 import { PackageInput, QuoteResponseInput, packageCreateSchema, packageStatusSchema, quoteResponseSchema } from '@ttp/shared-types';
+import { activeCountry } from '../common/countries';
 import { PrismaService } from '../common/prisma.service';
 import { RevalidationService } from '../common/revalidation.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
@@ -23,11 +24,20 @@ import { ScoringService } from '../scoring/scoring.service';
 import { packageData, packageInclude, uniquePackageSlug } from './packages';
 import { CurrentAccount, PortalAccount, PortalAuthGuard, PortalRoles } from './portal-auth';
 
-/** The signed-in operator; edits need an approved operator (a suspended one can still look). */
-function operatorOf(a: PortalAccount, forWrite = false) {
-  if (!a.operator) throw new ForbiddenException();
-  if (forWrite && a.operator.status !== 'APPROVED') throw new ForbiddenException('Your listing is not active, so changes are paused. Contact us.');
-  return a.operator;
+/**
+ * The signed-in operator. `drafts`: tours can be prepared while the application is in progress
+ * (decision 2026-10-10); `live`: anything DMCs or the public see needs an approved operator.
+ */
+function operatorOf(a: PortalAccount, need?: 'drafts' | 'live') {
+  const op = a.operator;
+  if (!op) throw new ForbiddenException();
+  if (need === 'live' && op.status !== 'APPROVED') {
+    throw new ForbiddenException(op.status === 'SUSPENDED' ? 'Your listing is suspended, so changes are paused. Contact us.' : 'You can do this once your application is approved.');
+  }
+  if (need === 'drafts' && !['DRAFT', 'PENDING', 'FLAGGED', 'APPROVED'].includes(op.status)) {
+    throw new ForbiddenException('Your listing is not active, so changes are paused. Contact us.');
+  }
+  return op;
 }
 
 /** Operator side of the partner portal (spec DI-2, B2B-1, B2B-2, B2B-3). English UI. */
@@ -76,7 +86,8 @@ export class OperatorPortalController {
 
   @Post('packages')
   async create(@Body(new ZodValidationPipe(packageCreateSchema)) body: PackageInput, @CurrentAccount() a: PortalAccount) {
-    const op = operatorOf(a, true);
+    const op = operatorOf(a, 'drafts');
+    await activeCountry(this.prisma, body.countryCode);
     const created = await this.prisma.$transaction(async (tx) => {
       const p = await tx.package.create({
         data: { ...packageData(body), operatorId: op.id, slug: await uniquePackageSlug(tx, body.title, op.slug), status: 'DRAFT' },
@@ -90,7 +101,8 @@ export class OperatorPortalController {
 
   @Patch('packages/:id')
   async update(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(packageCreateSchema)) body: PackageInput, @CurrentAccount() a: PortalAccount) {
-    const op = operatorOf(a, true);
+    const op = operatorOf(a, 'drafts');
+    await activeCountry(this.prisma, body.countryCode);
     const updated = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.package.findFirst({ where: { id, operatorId: op.id } });
       if (!existing) throw new NotFoundException('Tour not found');
@@ -107,9 +119,10 @@ export class OperatorPortalController {
   @Post('packages/:id/status')
   @HttpCode(200)
   async setStatus(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(packageStatusSchema)) body: { status: PackageStatus }, @CurrentAccount() a: PortalAccount) {
-    const op = operatorOf(a, true);
+    const op = operatorOf(a, 'drafts');
     const p = await this.prisma.package.findFirst({ where: { id, operatorId: op.id }, include: { dateRanges: true } });
     if (!p) throw new NotFoundException('Tour not found');
+    if (body.status === 'PUBLISHED' && op.status !== 'APPROVED') throw new ConflictException('Tours go live once your application is approved. Keep it as a draft until then.');
     if (body.status === 'PUBLISHED' && !p.descriptionRu) throw new ConflictException('Add a Russian description before publishing: Russian travellers and DMCs read it.');
     const updated = await this.prisma.package.update({ where: { id }, data: { status: body.status }, include: packageInclude });
     await this.prisma.auditLog.create({ data: { actorAccountId: a.id, action: `package.${body.status.toLowerCase()}`, entityType: 'package', entityId: id } });
@@ -131,7 +144,7 @@ export class OperatorPortalController {
   @Post('quotes/:id/respond')
   @HttpCode(200)
   async respond(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(quoteResponseSchema)) body: QuoteResponseInput, @CurrentAccount() a: PortalAccount) {
-    const op = operatorOf(a, true);
+    const op = operatorOf(a, 'live');
     const quote = await this.prisma.quoteRequest.findFirst({ where: { id, package: { operatorId: op.id } } });
     if (!quote) throw new NotFoundException('Quote request not found');
     const now = new Date();
@@ -163,7 +176,7 @@ export class OperatorPortalController {
   @Post('fam-trips/:id/confirm')
   @HttpCode(200)
   async confirmFamTrip(@Param('id', ParseUUIDPipe) famTripId: string, @CurrentAccount() a: PortalAccount) {
-    const op = operatorOf(a, true);
+    const op = operatorOf(a, 'live');
     const { count } = await this.prisma.famTripOperator.updateMany({ where: { famTripId, operatorId: op.id }, data: { confirmed: true } });
     if (count === 0) throw new NotFoundException('You are not part of this fam trip');
     await this.prisma.auditLog.create({ data: { actorAccountId: a.id, action: 'fam_trip.operator_confirm', entityType: 'fam_trip', entityId: famTripId } });

@@ -27,7 +27,12 @@ export class PublicService {
 
   async countries(): Promise<PublicCountry[]> {
     const [countries, counts] = await Promise.all([
-      this.prisma.country.findMany({ where: { code: { not: 'RU' } }, orderBy: { nameRu: 'asc' } }),
+      // Active destinations, plus any switched off later that still have listed operators.
+      this.prisma.country.findMany({
+        where: { OR: [{ active: true }, { operators: { some: LISTED } }] },
+        select: { code: true, nameEn: true, nameRu: true, nameRuIn: true },
+        orderBy: { nameRu: 'asc' },
+      }),
       this.prisma.operator.groupBy({ by: ['countryCode'], where: LISTED, _count: { _all: true } }),
     ]);
     const byCode = new Map(counts.map((c) => [c.countryCode, c._count._all]));

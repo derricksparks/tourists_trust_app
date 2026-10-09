@@ -7,6 +7,7 @@ import { useCanModerate } from '../auth';
 import { Pager } from '../components/Pager';
 import { StatusPill } from '../components/StatusPill';
 import { countryName, formatDate, titleCase } from '../format';
+import { useCountries } from '../countries';
 
 /** The operator approval queue: filter by status/country, search, oldest first. */
 export function OperatorsPage() {
@@ -22,7 +23,7 @@ export function OperatorsPage() {
   useEffect(() => setSearch(q ?? ''), [q]);
 
   const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats });
-  const countries = useQuery({ queryKey: ['countries'], queryFn: api.countries, staleTime: Infinity });
+  const countries = useCountries();
   const list = useQuery({
     queryKey: ['operators', { status, countryCode, q, page }],
     queryFn: () => api.operators({ status, countryCode, q, page }),

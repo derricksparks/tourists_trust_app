@@ -3,15 +3,18 @@ import Link from 'next/link';
 import { publicApi } from '@/lib/api';
 import { countryRuIn, dateRu } from '@/lib/format';
 import { renderMarkdown } from '@/lib/markdown';
+import { loadCountries } from '@/lib/countries';
 
 type Props = { params: { slug: string } };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  await loadCountries();
   const g = await publicApi.guide(params.slug);
   return { title: g.titleRu, description: g.summaryRu ?? undefined, alternates: { canonical: `/guides/${g.slug}` } };
 }
 
 export default async function GuidePage({ params }: Props) {
+  await loadCountries();
   const g = await publicApi.guide(params.slug);
   return (
     <article className="page">

@@ -11,6 +11,8 @@ import {
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
 import { RevalidationService } from '../common/revalidation.service';
+import { activeCountry } from '../common/countries';
+import { NotificationsService } from '../mail/notifications.service';
 import { ScoringService } from '../scoring/scoring.service';
 
 export function slugify(text: string): string {
@@ -34,6 +36,7 @@ export class OperatorsService {
     private readonly prisma: PrismaService,
     private readonly revalidation: RevalidationService,
     private readonly scoring: ScoringService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(query: OperatorListQuery): Promise<Paginated<Operator>> {
@@ -49,10 +52,10 @@ export class OperatorsService {
       }),
     };
     const [items, total] = await this.prisma.$transaction([
-      // Oldest first, so the approval queue is worked in arrival order.
+      // Oldest application first, so the approval queue is worked in arrival order; drafts last.
       this.prisma.operator.findMany({
         where,
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        orderBy: [{ submittedAt: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
@@ -76,10 +79,12 @@ export class OperatorsService {
   }
 
   async create(input: OperatorCreateInput, admin: AdminUser): Promise<Operator> {
-    const slug = await this.uniqueSlug(`${input.name}-${input.countryCode}`);
+    await activeCountry(this.prisma, input.countryCode);
+    const slug = await uniqueOperatorSlug(this.prisma, `${input.name}-${input.countryCode}`);
     return this.prisma.$transaction(async (tx) => {
       const operator = await tx.operator
-        .create({ data: { ...input, slug, badgeToken: newBadgeToken() } })
+        // Staff-entered operators go straight into the review queue.
+        .create({ data: { ...input, slug, badgeToken: newBadgeToken(), submittedAt: new Date() } })
         .catch(mapPrismaError);
       await tx.auditLog.create({
         data: { actorAdminId: admin.id, action: 'operator.create', entityType: 'operator', entityId: operator.id },
@@ -89,6 +94,7 @@ export class OperatorsService {
   }
 
   async update(id: string, input: OperatorUpdateInput, admin: AdminUser): Promise<Operator> {
+    if (input.countryCode) await activeCountry(this.prisma, input.countryCode);
     const operator = await this.prisma.$transaction(async (tx) => {
       const operator = await tx.operator.update({ where: { id }, data: input }).catch(mapPrismaError);
       await tx.auditLog.create({
@@ -138,19 +144,19 @@ export class OperatorsService {
     });
     // Approving or suspending changes the public site and every embedded badge.
     this.revalidation.revalidate('operators');
+    this.notifications.operatorDecided(id, decision, reason);
     return operator;
   }
 
-  private async uniqueSlug(text: string): Promise<string> {
-    const base = slugify(text) || 'operator';
-    const taken = await this.prisma.operator.findMany({
-      where: { slug: { startsWith: base } },
-      select: { slug: true },
-    });
-    const used = new Set(taken.map((o) => o.slug));
-    if (!used.has(base)) return base;
-    for (let n = 2; ; n++) if (!used.has(`${base}-${n}`)) return `${base}-${n}`;
-  }
+}
+
+/** A free public slug for an operator, from its name and country ("pearl-safaris-ug"). */
+export async function uniqueOperatorSlug(db: Pick<Prisma.TransactionClient, 'operator'>, text: string): Promise<string> {
+  const base = slugify(text) || 'operator';
+  const taken = await db.operator.findMany({ where: { slug: { startsWith: base } }, select: { slug: true } });
+  const used = new Set(taken.map((o) => o.slug));
+  if (!used.has(base)) return base;
+  for (let n = 2; ; n++) if (!used.has(`${base}-${n}`)) return `${base}-${n}`;
 }
 
 function mapPrismaError(e: unknown): never {

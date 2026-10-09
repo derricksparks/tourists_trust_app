@@ -110,3 +110,65 @@ test('a partner who forgot the password asks for a new link from the sign-in pag
   await page.getByRole('button', { name: 'Send link / Отправить' }).click();
   await expect(page.getByRole('status')).toContainText('If dmc@example.com has a login, we have emailed it a link');
 });
+
+const PDF = Buffer.from('%PDF-1.4\n% e2e test licence\n%%EOF\n');
+
+test('a tour operator applies: signs up, fills in, uploads, sends for review', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('link', { name: 'Apply to be listed' }).click();
+  await page.getByLabel('Company name').fill('Kidepo Wilderness (e2e)');
+  await page.getByLabel('Country you operate from').selectOption('UG');
+  await expect(page.getByText('You’ll need your licence from Uganda Tourism Board.')).toBeVisible();
+  await page.getByLabel('Email (your login)').fill(`kidepo-${Date.now()}@example.com`);
+  await page.getByLabel('Password').fill('a-long-password-1');
+  await page.getByRole('button', { name: 'Create login and continue' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Kidepo Wilderness (e2e)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send for review' })).toBeDisabled();
+  await page.getByLabel('Tourism licence number').fill('UTB-E2E-001');
+  await page.getByLabel('Business registration number').fill('URSB-E2E-001');
+  await page.getByLabel('Physical office address').fill('Kitgum Road, Kaabong');
+  await page.getByLabel('Year established').fill('2016');
+  await page.getByLabel('Reference: email or phone').fill('ref@example.com');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).toBeVisible();
+
+  await page.getByLabel('Document', { exact: true }).selectOption('TOURISM_LICENSE');
+  await page.getByLabel('File').setInputFiles({ name: 'licence.pdf', mimeType: 'application/pdf', buffer: PDF });
+  await page.getByRole('button', { name: 'Upload' }).click();
+  await expect(page.getByText('licence.pdf')).toBeVisible();
+  await page.getByLabel('Document', { exact: true }).selectOption('BUSINESS_REGISTRATION');
+  await page.getByLabel('File').setInputFiles({ name: 'registration.pdf', mimeType: 'application/pdf', buffer: PDF });
+  await page.getByRole('button', { name: 'Upload' }).click();
+  await expect(page.getByText('Everything we need is here.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Send for review' }).click();
+  await expect(page.getByRole('status').first()).toContainText('Your application is with our team');
+  await expect(page.getByLabel('Tourism licence number')).toBeDisabled();
+});
+
+test('a flagged operator sees why and what is missing', async ({ page }) => {
+  await signIn(page, 'flagged@example.com');
+  await expect(page.getByRole('status').first()).toContainText('Licence number does not match the registry');
+  await expect(page.getByRole('button', { name: 'Send the updated application' })).toBeVisible();
+});
+
+test('an operator imports tours from a spreadsheet and creates a feed key', async ({ page }) => {
+  await signIn(page, 'operator@example.com');
+  await page.getByRole('link', { name: 'Integrations' }).click();
+  const csv = [
+    'external_ref,title,title_ru,description_ru,country,duration_days,price,currency,dates,published',
+    'E2E-1,Ssese Islands Escape (e2e),Острова Сесе (e2e),Отдых на озере Виктория.,UG,3,600,USD,2027-08-01/2027-08-03,yes',
+    'E2E-2,Jinja Rafting Day (e2e),,,UG,1,140,USD,,no',
+  ].join('\n');
+  await page.locator('#csvfile').setInputFiles({ name: 'tours.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  await expect(page.getByText('Checked 2 rows: 2 new, 0 updated.')).toBeVisible();
+  await page.getByRole('button', { name: 'Import 2 tours' }).click();
+  await expect(page.getByText('Imported: 2 new, 0 updated.')).toBeVisible();
+
+  await page.getByLabel('Key name').fill('Website sync (e2e)');
+  await page.getByRole('button', { name: 'Create key' }).click();
+  await expect(page.getByLabel('New API key')).toHaveValue(/^ttp_live_/);
+  await page.getByRole('link', { name: 'Tours', exact: true }).click();
+  await expect(page.getByText('Ssese Islands Escape (e2e)')).toBeVisible();
+});

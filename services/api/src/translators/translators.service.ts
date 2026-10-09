@@ -9,6 +9,7 @@ import {
   TranslatorDecisionInput,
   TranslatorSignupInput,
 } from '@ttp/shared-types';
+import { activeCountry } from '../common/countries';
 import { PrismaService } from '../common/prisma.service';
 import { RevalidationService } from '../common/revalidation.service';
 import { TelegramBotApi } from '../telegram/bot-api';
@@ -66,6 +67,7 @@ export class TranslatorsService {
 
 
   async signup(user: TelegramUser, input: TranslatorSignupInput) {
+    await activeCountry(this.prisma, input.specialtyCountryCode);
     const existing = await this.prisma.translator.findUnique({ where: { telegramUserId: user.id } });
     if (existing) throw new ConflictException(`Вы уже подали заявку. Статус: ${STATUS_RU[existing.verificationStatus]}.`);
     const { consent: _consent, ...data } = input;

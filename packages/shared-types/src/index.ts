@@ -12,8 +12,6 @@ export type AdminRole = (typeof ADMIN_ROLES)[number];
 export const REVIEW_STATUSES = ['PENDING', 'PUBLISHED', 'REJECTED'] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 
-/** Countries the platform launches with (operators) plus Russia (demand side). */
-export const LAUNCH_COUNTRIES = ['UG', 'TZ', 'KE'] as const;
 
 // ─── Admin API: auth ─────────────────────────────────────────────────────────
 
@@ -178,7 +176,30 @@ export interface CountryOption {
   code: string;
   nameEn: string;
   nameRu: string;
+  /** Locative for Russian titles: "в Уганде". */
+  nameRuIn: string | null;
 }
+
+/** Staff view of a country (Phase 4: countries are added and switched on in the dashboard). */
+export interface AdminCountry extends CountryOption {
+  active: boolean;
+  licensingAuthority: string | null;
+  licenceRegisterUrl: string | null;
+  operatorCount: number;
+}
+
+const countryFields = {
+  nameEn: z.string().trim().min(2).max(80),
+  nameRu: z.string().trim().min(2).max(80),
+  nameRuIn: z.string().trim().min(3).max(80).regex(/^(в|во|на) /, 'Starts with «в», «во» or «на», e.g. «в Замбии»'),
+  active: z.boolean().default(false),
+  licensingAuthority: z.string().trim().min(2).max(200).nullable().optional(),
+  licenceRegisterUrl: z.string().trim().url().regex(/^https?:\/\//).nullable().optional(),
+};
+export const countryCreateSchema = z.object({ code: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, 'Two-letter ISO code, e.g. ZM'), ...countryFields });
+export type CountryCreateInput = z.infer<typeof countryCreateSchema>;
+export const countryUpdateSchema = z.object(countryFields).partial();
+export type CountryUpdateInput = z.infer<typeof countryUpdateSchema>;
 
 // ─── Public API (website, Telegram bot, Mini App) ────────────────────────────
 
@@ -405,7 +426,6 @@ export const SPECIALTIES: Record<string, string> = {
 };
 const languageCode = z.string().refine((l) => l in LANGUAGES, 'Unknown language');
 const specialty = z.string().refine((s) => s in SPECIALTIES, 'Unknown specialty');
-const TRANSLATOR_COUNTRIES = ['UG', 'TZ', 'KE', 'RW'] as const;
 
 /** Self sign-up from the Telegram Mini App (TR-1). Proficiency is self-reported; staff spot-check before listing. */
 export const translatorSignupSchema = z
@@ -413,7 +433,7 @@ export const translatorSignupSchema = z
     name: z.string().trim().min(2).max(100),
     languages: z.array(languageCode).min(2, 'Укажите хотя бы два языка').max(8),
     proficiency: z.record(languageCode, z.enum(PROFICIENCY_LEVELS)),
-    specialtyCountryCode: z.enum(TRANSLATOR_COUNTRIES),
+    specialtyCountryCode: countryCode,
     specialties: z.array(specialty).min(1, 'Выберите хотя бы одно направление'),
     bioRu: z.string().trim().max(1000).optional(),
     phone: z.string().trim().max(40).optional(),
@@ -632,7 +652,7 @@ export const packageInputSchema = z.object({
   titleRu: z.string().trim().min(3).max(150).nullable().optional(),
   descriptionEn: z.string().trim().min(1).max(5000).nullable().optional(),
   descriptionRu: z.string().trim().min(1).max(5000).nullable().optional(),
-  countryCode: z.enum(['UG', 'TZ', 'KE', 'RW']),
+  countryCode,
   durationDays: z.number().int().min(1).max(60),
   price: z.number().min(0).max(1_000_000).nullable().optional(),
   currency: z.enum(CURRENCIES).nullable().optional(),
@@ -731,4 +751,75 @@ export interface OperatorScoreBreakdown {
   responsesCounted: number;
   completenessScore: number;
   missing: { key: string; label: string; points: number }[];
+}
+
+// ─── Phase 4: operator self-onboarding ───────────────────────────────────────
+
+/** A tour operator signs up on the portal; the account starts as a draft application. */
+export const operatorSignupSchema = z.object({
+  name: z.string().trim().min(2, 'Company name, at least 2 characters').max(120),
+  countryCode,
+  email: z.string().trim().toLowerCase().email(),
+  password,
+  phone: z.string().trim().min(5).max(40).optional(),
+});
+export type OperatorSignupInput = z.infer<typeof operatorSignupSchema>;
+
+/** The operator edits its own application (draft or flagged); same fields and rules as staff edits. */
+export const operatorApplicationSchema = operatorUpdateSchema;
+export type OperatorApplicationInput = OperatorUpdateInput;
+
+export const DOCUMENT_TYPES = ['TOURISM_LICENSE', 'BUSINESS_REGISTRATION', 'OTHER'] as const;
+export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+export const DOCUMENT_CONTENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png'] as const;
+export const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+export const DOCUMENTS_PER_OPERATOR = 10;
+
+/** What an application needs before it can go to staff (TV-1). Labels are for the operator (English). */
+export const APPLICATION_REQUIREMENTS: { key: string; label: string }[] = [
+  { key: 'businessRegNumber', label: 'Business registration number' },
+  { key: 'tourismBoardLicense', label: 'Tourism licence number' },
+  { key: 'licensingAuthority', label: 'Licensing authority' },
+  { key: 'address', label: 'Physical address' },
+  { key: 'yearEstablished', label: 'Year established' },
+  { key: 'referenceContactInfo', label: 'A reference contact (a client or partner we may ask)' },
+  { key: 'email', label: 'Contact email' },
+  { key: 'doc:TOURISM_LICENSE', label: 'A copy of the tourism licence' },
+  { key: 'doc:BUSINESS_REGISTRATION', label: 'A copy of the business registration certificate' },
+];
+
+/** Requirements an application still misses; empty means it can be submitted. */
+export function applicationMissing(op: Record<string, unknown>, documentTypes: string[]): { key: string; label: string }[] {
+  return APPLICATION_REQUIREMENTS.filter(({ key }) => {
+    if (key.startsWith('doc:')) return !documentTypes.includes(key.slice(4));
+    const v = op[key];
+    return v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+  });
+}
+
+// ─── Phase 4: package feed (API keys, spreadsheet import, /feed/v1) ──────────
+
+export const apiKeyCreateSchema = z.object({ name: z.string().trim().min(2).max(60) });
+export const externalRefSchema = z.string().regex(/^[A-Za-z0-9._:-]{1,100}$/, 'Letters, digits and . _ : - only, up to 100 characters');
+
+/** A tour as the feed API takes it: the form's fields plus whether it should be live. */
+export const feedPackageSchema = packageInputSchema.extend({ published: z.boolean().default(false) });
+export type FeedPackageInput = z.infer<typeof feedPackageSchema>;
+
+export const csvImportSchema = z.object({ csv: z.string().min(1).max(1_000_000), dryRun: z.boolean().default(true) });
+
+export interface ImportRowResult {
+  row: number; // spreadsheet row number (header is row 1)
+  externalRef: string | null;
+  action: 'create' | 'update' | 'error';
+  published?: boolean;
+  errors: string[];
+  warnings: string[];
+}
+export interface ImportResult {
+  dryRun: boolean;
+  rows: ImportRowResult[];
+  created: number;
+  updated: number;
+  failed: number;
 }

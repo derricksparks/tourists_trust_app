@@ -3,10 +3,12 @@ import Link from 'next/link';
 import { OperatorCard } from '@/components/OperatorCard';
 import { publicApi } from '@/lib/api';
 import { countryRuIn } from '@/lib/format';
+import { loadCountries } from '@/lib/countries';
 
 type Props = { searchParams: { country?: string } };
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  await loadCountries();
   const c = searchParams.country?.toUpperCase();
   return {
     title: c ? `Проверенные туроператоры ${countryRuIn(c)}` : 'Проверенные туроператоры',
@@ -15,6 +17,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 }
 
 export default async function OperatorsPage({ searchParams }: Props) {
+  await loadCountries();
   const country = /^[A-Za-z]{2}$/.test(searchParams.country ?? '') ? searchParams.country!.toUpperCase() : undefined;
   const [countries, operators] = await Promise.all([publicApi.countries(), publicApi.operators(country)]);
 

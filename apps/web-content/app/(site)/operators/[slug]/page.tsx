@@ -3,10 +3,12 @@ import Link from 'next/link';
 import { Seal, Stars } from '@/components/Seal';
 import { publicApi, SITE_URL, telegramLink } from '@/lib/api';
 import { count, countryRuIn, dateRangeRu, dateRu, monthYearRu, priceRu, yearsRu } from '@/lib/format';
+import { loadCountries } from '@/lib/countries';
 
 type Props = { params: { slug: string } };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  await loadCountries();
   const op = await publicApi.operator(params.slug);
   const title = `${op.name}: проверенный туроператор ${countryRuIn(op.countryCode)}`;
   const description =
@@ -15,6 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function OperatorPage({ params }: Props) {
+  await loadCountries();
   const op = await publicApi.operator(params.slug);
   const since = op.verifiedSince ? new Date(op.verifiedSince).getUTCFullYear() : null;
   const jsonLd = {

@@ -229,6 +229,7 @@ describe('production settings', () => {
     PORTAL_URL: 'https://partners.site.example',
     ADMIN_URL: 'https://admin.site.example',
     REVALIDATE_SECRET: 'r'.repeat(40),
+    DOCUMENT_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
   };
   it('refuses demo secrets and localhost links, warns about switched-off services', () => {
     expect(checkProductionConfig({ ...good, NODE_ENV: 'development', JWT_SECRET: 'short' })).toEqual([]);

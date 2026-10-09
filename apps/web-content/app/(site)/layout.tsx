@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ReactNode } from 'react';
 import { SITE_URL, telegramLink } from '@/lib/api';
+import { destinationsLine, loadCountries } from '@/lib/countries';
 import './site.css';
 
 export const metadata: Metadata = {
@@ -13,7 +14,8 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
 };
 
-export default function SiteLayout({ children }: { children: ReactNode }) {
+export default async function SiteLayout({ children }: { children: ReactNode }) {
+  const countries = await loadCountries();
   return (
     <html lang="ru">
       <head>
@@ -33,7 +35,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
               </svg>
               <span>
                 <strong>Проверено: Африка</strong>
-                <span>Уганда · Танзания · Кения</span>
+                <span>{destinationsLine(countries)}</span>
               </span>
             </Link>
             <nav className="nav" aria-label="Разделы">

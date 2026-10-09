@@ -4,14 +4,8 @@ import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, Operator } from '../api';
 import { useCanModerate } from '../auth';
+import { useCountries } from '../countries';
 
-/** Licensing bodies for the launch countries; offered as suggestions, any value is allowed. */
-const AUTHORITIES: Record<string, string[]> = {
-  UG: ['Uganda Tourism Board'],
-  TZ: ['Tanzania Tourist Agency Licensing Authority (TALA)'],
-  KE: ['Tourism Regulatory Authority (Kenya)'],
-  RW: ['Rwanda Development Board'],
-};
 
 const FIELDS = [
   'name', 'legalName', 'countryCode', 'licensingAuthority', 'tourismBoardLicense', 'businessRegNumber', 'address',
@@ -50,10 +44,12 @@ export function OperatorFormPage() {
   const canModerate = useCanModerate();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const countries = useQuery({ queryKey: ['countries'], queryFn: api.countries, staleTime: Infinity });
+  const countries = useCountries();
   const existing = useQuery({ queryKey: ['operator', id], queryFn: () => api.operator(id!), enabled: editing });
 
   const [values, setValues] = useState<Values>(emptyValues);
+  // Each country's licensing authority (set on the Countries page), offered as suggestions; any value is allowed.
+  const authorities = [...new Set((countries.data ?? []).filter((c) => c.licensingAuthority && (!values.countryCode || c.code === values.countryCode)).map((c) => c.licensingAuthority!))];
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
   useEffect(() => {
@@ -164,7 +160,7 @@ export function OperatorFormPage() {
                   <select id="countryCode" value={values.countryCode} onChange={set('countryCode')} aria-invalid={!!errors.countryCode}>
                     <option value="">Choose a country</option>
                     {countries.data
-                      ?.filter((c) => c.code !== 'RU')
+                      ?.filter((c) => c.active || c.code === values.countryCode)
                       .map((c) => (
                         <option key={c.code} value={c.code}>
                           {c.nameEn}
@@ -175,7 +171,7 @@ export function OperatorFormPage() {
               })}
               {input('licensingAuthority', 'Licensing authority', { list: 'authorities' })}
               <datalist id="authorities">
-                {(AUTHORITIES[values.countryCode] ?? Object.values(AUTHORITIES).flat()).map((a) => (
+                {authorities.map((a) => (
                   <option key={a} value={a} />
                 ))}
               </datalist>

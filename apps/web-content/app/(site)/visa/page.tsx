@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { publicApi } from '@/lib/api';
 import { countryRuIn, dateRu } from '@/lib/format';
+import { loadCountries } from '@/lib/countries';
 
 export const metadata: Metadata = {
   title: 'Визы в Уганду, Танзанию и Кению для россиян',
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function VisaListPage() {
+  await loadCountries();
   const guides = await publicApi.visaGuides();
   return (
     <div className="page">

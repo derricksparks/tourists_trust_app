@@ -44,7 +44,7 @@ const SELLABLE = { status: 'PUBLISHED', operator: { status: 'APPROVED' } } satis
 const operatorSummary = { select: { id: true, name: true, slug: true, countryCode: true, licensingAuthority: true, approvedAt: true, yearEstablished: true, responseTimeScore: true, status: true } } as const;
 
 const inventoryQuery = z.object({
-  country: z.enum(['UG', 'TZ', 'KE', 'RW']).optional(),
+  country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).optional(),
   q: z.string().trim().min(1).max(100).optional(),
   maxDays: z.coerce.number().int().min(1).max(60).optional(),
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),

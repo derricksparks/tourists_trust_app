@@ -1,4 +1,7 @@
 import type {
+  AdminCountry,
+  CountryCreateInput,
+  CountryUpdateInput,
   AdminLoginResult,
   AdminRole,
   AdminStats,
@@ -63,6 +66,7 @@ export interface Operator {
   completenessScore: number | null;
   badgeToken: string;
   approvedAt: string | null;
+  submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,9 +79,14 @@ export interface HistoryEntry {
   actorAdmin: { id: string; name: string } | null;
 }
 
+export interface OperatorDocument {
+  id: string; type: string; originalFilename: string; contentType: string; sizeBytes: number;
+  reviewNotes: string | null; reviewedAt: string | null; createdAt: string;
+}
+
 export interface OperatorDetail extends Operator {
-  country: CountryOption;
-  documents: { id: string; type: string; originalFilename: string; reviewNotes: string | null; createdAt: string }[];
+  country: CountryOption & { licenceRegisterUrl: string | null };
+  documents: OperatorDocument[];
   media: { id: string; kind: string; externalUrl: string | null; captionRu: string | null; status: string }[];
   history: HistoryEntry[];
 }
@@ -330,7 +339,16 @@ export const api = {
   login: (email: string, password: string) => request<AdminLoginResult>('POST', '/admin/auth/login', { email, password }),
   me: () => request<AdminProfile>('GET', '/admin/auth/me'),
   stats: () => request<AdminStats>('GET', '/admin/stats'),
-  countries: () => request<CountryOption[]>('GET', '/admin/countries'),
+  countries: () => request<AdminCountry[]>('GET', '/admin/countries'),
+  createCountry: (body: CountryCreateInput) => request<AdminCountry>('POST', '/admin/countries', body),
+  updateCountry: (code: string, body: CountryUpdateInput) => request<AdminCountry>('PATCH', `/admin/countries/${code}`, body),
+  /** Opens an operator's uploaded document in a new tab (needs the admin token, so it is fetched). */
+  openDocument: async (operatorId: string, id: string) => {
+    const res = await fetch(`/api/admin/operators/${operatorId}/documents/${id}/file`, { headers: { Authorization: `Bearer ${tokenStore.get()}` } });
+    if (!res.ok) throw new ApiError(res.status, res.status === 403 ? 'Only moderators can open documents' : 'Could not open the file');
+    window.open(URL.createObjectURL(await res.blob()), '_blank', 'noopener');
+  },
+  reviewDocument: (operatorId: string, id: string, notes: string) => request<OperatorDocument>('POST', `/admin/operators/${operatorId}/documents/${id}/review`, { notes }),
 
   operators: (p: { status?: OperatorStatus; countryCode?: string; q?: string; page?: number }) =>
     request<Paginated<Operator>>('GET', `/admin/operators${qs(p)}`),

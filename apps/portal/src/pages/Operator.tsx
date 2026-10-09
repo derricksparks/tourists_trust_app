@@ -3,6 +3,7 @@ import { CURRENCIES, INCLUSION_OPTIONS, PackageInput, PackageStatus, packageCrea
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, OperatorPackage, Quote } from '../api';
+import { useCountries } from '../countries';
 import { COUNTRY_EN, dateEn, money, PUBLIC_SITE } from '../format';
 
 const STATUS_PILL: Record<PackageStatus, [string, string]> = { DRAFT: ['wait', 'Draft'], PUBLISHED: ['ok', 'Published'], ARCHIVED: ['off', 'Archived'] };
@@ -151,6 +152,7 @@ const MESSAGES: Record<string, string> = {
 };
 
 export function PackageFormPage() {
+  const countries = useCountries();
   const { id } = useParams();
   const editing = !!id;
   const navigate = useNavigate();
@@ -220,7 +222,7 @@ export function PackageFormPage() {
             <div className="field wide"><label htmlFor="title">Name (English)</label><input id="title" value={f.title} onChange={(e) => set('title', e.target.value)} aria-invalid={!!errors.title} />{err('title')}</div>
             <div className="field wide"><label htmlFor="titleRu">Name in Russian</label><input id="titleRu" lang="ru" value={f.titleRu} onChange={(e) => set('titleRu', e.target.value)} /><span className="hint">Shown on the Russian site. Ask your platform contact if you need help translating.</span></div>
             <div className="field"><label htmlFor="country">Country</label>
-              <select id="country" value={f.countryCode} onChange={(e) => set('countryCode', e.target.value)}>{['UG', 'TZ', 'KE', 'RW'].map((c) => <option key={c} value={c}>{COUNTRY_EN[c]}</option>)}</select>
+              <select id="country" value={f.countryCode} onChange={(e) => set('countryCode', e.target.value)}>{(countries.data ?? [{ code: f.countryCode, nameEn: COUNTRY_EN[f.countryCode] ?? f.countryCode }]).map((c) => <option key={c.code} value={c.code}>{c.nameEn}</option>)}</select>
             </div>
             <div className="field"><label htmlFor="days">Days</label><input id="days" type="number" min={1} max={60} value={f.durationDays} onChange={(e) => set('durationDays', e.target.value)} aria-invalid={!!errors.durationDays} />{err('durationDays')}</div>
             <div className="field wide"><label htmlFor="descRu">Description in Russian</label><textarea id="descRu" lang="ru" rows={5} value={f.descriptionRu} onChange={(e) => set('descriptionRu', e.target.value)} /><span className="hint">Required before publishing.</span></div>

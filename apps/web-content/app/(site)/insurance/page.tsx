@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { publicApi } from '@/lib/api';
 import { countryRu, dateRu } from '@/lib/format';
+import { loadCountries } from '@/lib/countries';
 
 export const metadata: Metadata = {
   title: 'Страховка для поездки в Уганду, Танзанию и Кению: сравнение',
@@ -9,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function InsurancePage() {
+  await loadCountries();
   const insurers = await publicApi.insurers();
   return (
     <div className="page">

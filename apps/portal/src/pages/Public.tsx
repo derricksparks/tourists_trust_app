@@ -49,6 +49,7 @@ export function LoginPage() {
         {error && <p className="alert err" role="alert">{error}</p>}
         <button className="btn primary" type="submit" disabled={busy || !email || !password}>{busy ? '…' : 'Sign in / Войти'}</button>
         <p className="small"><Link to="/forgot-password">Forgot your password? / Забыли пароль?</Link></p>
+        <p className="small" lang="en">Tour operator in East Africa? <Link to="/apply">Apply to be listed</Link></p>
         <p className="small" lang="ru">Турфирма из России? <Link to="/signup">Подать заявку на доступ</Link></p>
       </form>
     </div>

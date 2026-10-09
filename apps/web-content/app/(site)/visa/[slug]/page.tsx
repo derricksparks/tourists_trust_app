@@ -4,10 +4,12 @@ import { Checklist } from '@/components/Checklist';
 import { publicApi } from '@/lib/api';
 import { countryRu, countryRuIn, dateRu } from '@/lib/format';
 import { renderMarkdown } from '@/lib/markdown';
+import { loadCountries } from '@/lib/countries';
 
 type Props = { params: { slug: string } };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  await loadCountries();
   const g = await publicApi.visaGuide(params.slug);
   return {
     title: `${g.titleRu}: документы и порядок подачи`,
@@ -17,6 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function VisaGuidePage({ params }: Props) {
+  await loadCountries();
   const g = await publicApi.visaGuide(params.slug);
   const operatorsLink = `/operators?country=${g.countryCode}`;
   return (

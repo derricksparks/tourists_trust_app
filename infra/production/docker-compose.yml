@@ -50,6 +50,11 @@ services:
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-}
       MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
       STAFF_EMAILS: ${STAFF_EMAILS:-}
+      DOCUMENT_ENCRYPTION_KEY: ${DOCUMENT_ENCRYPTION_KEY:?set DOCUMENT_ENCRYPTION_KEY in .env}
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      # Operators' licence and registration files, encrypted (backed up by the backup service)
+      - uploads:/data/uploads
     depends_on:
       db: { condition: service_healthy }
     healthcheck:
@@ -104,7 +109,8 @@ services:
     depends_on: [web, api]
     logging: *logging
 
-  # Nightly database dump into ./backups, kept 14 days. Copy them off the server too (docs/DEPLOY.md).
+  # Nightly database dump and copy of the (encrypted) uploads into ./backups, kept 14 days.
+  # Copy them off the server too (docs/DEPLOY.md).
   backup:
     image: postgres:16.10
     restart: unless-stopped
@@ -116,6 +122,7 @@ services:
     volumes:
       - ./backups:/backups
       - ./backup.sh:/backup.sh:ro
+      - uploads:/uploads:ro
     entrypoint: ["sh", "/backup.sh"]
     depends_on:
       db: { condition: service_healthy }
@@ -123,5 +130,6 @@ services:
 
 volumes:
   pgdata:
+  uploads:
   caddy_data:
   caddy_config:

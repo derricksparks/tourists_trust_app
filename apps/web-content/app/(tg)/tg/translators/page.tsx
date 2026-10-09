@@ -1,12 +1,12 @@
 'use client';
 
-import type { PublicTranslator } from '@ttp/shared-types';
+import type { PublicCountry, PublicTranslator } from '@ttp/shared-types';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { TranslatorCard } from '@/components/TranslatorCard';
+import { registerCountries } from '@/lib/format';
 import { useTelegram } from '@/lib/useTelegram';
 
-const COUNTRIES: [string, string][] = [['UG', 'Уганда'], ['TZ', 'Танзания'], ['KE', 'Кения'], ['RW', 'Руанда']];
 
 export default function TelegramTranslators() {
   useTelegram('/tg');
@@ -14,6 +14,18 @@ export default function TelegramTranslators() {
   const [country, setCountry] = useState<string | null>(null);
   const [list, setList] = useState<PublicTranslator[] | null>(null);
   const [error, setError] = useState(false);
+  const [countries, setCountries] = useState<PublicCountry[]>([]);
+
+  // Destinations come from the API (staff add countries); also teaches the cards their Russian names.
+  useEffect(() => {
+    fetch('/backend/public/countries')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: PublicCountry[]) => {
+        registerCountries(list);
+        setCountries(list);
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     setList(null);
@@ -31,8 +43,8 @@ export default function TelegramTranslators() {
       </header>
       <div className="chips" role="group" aria-label="Страна">
         <button className="chip" aria-current={country === null} onClick={() => setCountry(null)}>Все</button>
-        {COUNTRIES.map(([c, n]) => (
-          <button key={c} className="chip" aria-current={country === c} onClick={() => setCountry(c)}>{n}</button>
+        {countries.map((c) => (
+          <button key={c.code} className="chip" aria-current={country === c.code} onClick={() => setCountry(c.code)}>{c.nameRu}</button>
         ))}
       </div>
       {error && <p className="notice">Не удалось загрузить список. Попробуйте позже.</p>}

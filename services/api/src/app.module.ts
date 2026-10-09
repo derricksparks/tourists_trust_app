@@ -12,8 +12,10 @@ import { ScoringModule } from './scoring/scoring.service';
 import { TranslatorsModule } from './translators/translators.module';
 import { PublicModule } from './public/public.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { FeedModule } from './feed/feed.module';
 import { HealthController } from './health/health.controller';
 import { NotificationsModule } from './mail/notifications.service';
+import { StorageModule } from './storage/document-store';
 import { OperatorsModule } from './operators/operators.module';
 import { ReviewsModule } from './reviews/reviews.module';
 
@@ -22,6 +24,7 @@ import { ReviewsModule } from './reviews/reviews.module';
     PrismaModule,
     RevalidationModule,
     NotificationsModule,
+    StorageModule,
     AdminAuthModule,
     AdminOverviewModule,
     OperatorsModule,
@@ -35,6 +38,7 @@ import { ReviewsModule } from './reviews/reviews.module';
     ReviewInvitesModule,
     ScoringModule,
     PortalModule,
+    FeedModule,
   ],
   controllers: [HealthController],
 })

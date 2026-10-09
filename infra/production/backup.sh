@@ -1,5 +1,6 @@
 #!/bin/sh
-# Dumps the database once a day (and once at start) into /backups; keeps 14 days.
+# Dumps the database and archives the encrypted uploads once a day (and once at start) into
+# /backups; keeps 14 days.
 # Restore: see docs/DEPLOY.md, "Restoring a backup".
 set -eu
 while true; do
@@ -11,6 +12,10 @@ while true; do
     rm -f "$file.partial"
     echo "Backup FAILED at $(date -u)" >&2
   fi
-  find /backups -name 'ttp-*.dump' -mtime +14 -delete
+  # Uploaded documents are already encrypted; archive them alongside the dump.
+  if [ -d /uploads ]; then
+    tar -czf "/backups/uploads-$(date -u +%Y-%m-%dT%H%M).tar.gz" -C /uploads . && echo "Uploads archived"
+  fi
+  find /backups \( -name 'ttp-*.dump' -o -name 'uploads-*.tar.gz' \) -mtime +14 -delete
   sleep 86400
 done

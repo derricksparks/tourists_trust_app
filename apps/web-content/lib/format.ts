@@ -1,12 +1,19 @@
-const COUNTRY_RU: Record<string, { name: string; in: string }> = {
-  UG: { name: 'Уганда', in: 'в Уганде' },
-  TZ: { name: 'Танзания', in: 'в Танзании' },
-  KE: { name: 'Кения', in: 'в Кении' },
-  RW: { name: 'Руанда', in: 'в Руанде' },
-  RU: { name: 'Россия', in: 'в России' },
-};
-export const countryRu = (code: string) => COUNTRY_RU[code]?.name ?? code;
-export const countryRuIn = (code: string) => COUNTRY_RU[code]?.in ?? code;
+/**
+ * Russian country names. Countries are managed by staff (Phase 4), so the list is filled from the
+ * API by registerCountries (site and Mini App layouts); these launch countries are the fallback.
+ */
+const COUNTRY_RU = new Map<string, { name: string; in: string }>([
+  ['UG', { name: 'Уганда', in: 'в Уганде' }],
+  ['TZ', { name: 'Танзания', in: 'в Танзании' }],
+  ['KE', { name: 'Кения', in: 'в Кении' }],
+  ['RW', { name: 'Руанда', in: 'в Руанде' }],
+  ['RU', { name: 'Россия', in: 'в России' }],
+]);
+export function registerCountries(list: { code: string; nameRu: string; nameRuIn: string | null }[]) {
+  for (const c of list) COUNTRY_RU.set(c.code, { name: c.nameRu, in: c.nameRuIn ?? `в стране ${c.nameRu}` });
+}
+export const countryRu = (code: string) => COUNTRY_RU.get(code)?.name ?? code;
+export const countryRuIn = (code: string) => COUNTRY_RU.get(code)?.in ?? code;
 
 /** Russian plural: plural(5, ['отзыв', 'отзыва', 'отзывов']) → 'отзывов'. */
 export function plural(n: number, [one, few, many]: [string, string, string]) {

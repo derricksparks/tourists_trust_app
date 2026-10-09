@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { publicApi } from '@/lib/api';
 import { countryRu } from '@/lib/format';
+import { loadCountries } from '@/lib/countries';
 
 export const metadata: Metadata = {
   title: 'Как добраться и что посмотреть',
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function GuidesPage() {
+  await loadCountries();
   const guides = await publicApi.guides();
   const byCountry = new Map<string, typeof guides>();
   for (const g of guides) byCountry.set(g.countryCode, [...(byCountry.get(g.countryCode) ?? []), g]);

@@ -25,6 +25,8 @@ FROM base AS app
 ENV NODE_ENV=production
 # The site writes its page cache under apps/web-content/.next, so the app user owns the files.
 COPY --from=build --chown=node:node /app /app
+# Mount point for uploaded documents; a new Docker volume takes this ownership.
+RUN mkdir -p /data/uploads && chown node:node /data/uploads
 USER node
 
 FROM caddy:2.10.2-alpine AS proxy
