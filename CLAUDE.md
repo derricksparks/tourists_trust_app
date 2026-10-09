@@ -14,10 +14,14 @@ Full spec: `docs/BUILD_SPEC.md` (Part A = requirements, Part B = gaps, decisions
 
 ## Stack & commands
 
-TypeScript everywhere: pnpm workspace, NestJS API, Prisma 6 + PostgreSQL 16, Jest + supertest.
+TypeScript everywhere: pnpm workspace, NestJS API, Prisma 6 + PostgreSQL 16, Jest + supertest;
+admin dashboard is React 18 + Vite + TanStack Query + React Router, tested with Vitest and Playwright.
 Pinned versions are deliberate; don't bump majors without asking.
 
 - `pnpm --filter @ttp/shared-types build` — needed before the API typechecks/tests
-- `pnpm typecheck`, `pnpm test` (tests need Postgres; they use the `ttp_test` database)
+- `pnpm typecheck`, `pnpm test` (API tests need Postgres; they use the `ttp_test` database)
+- `pnpm e2e` — dashboard browser tests; needs the API running and re-seeds its database
+- Workflow rules (`OPERATOR_TRANSITIONS`, `REVIEW_TRANSITIONS`) and request schemas live in
+  `packages/shared-types` and are used by both the API and the dashboard — change them there only.
 - Schema change: edit `schema.prisma`, then `cd services/api && npx prisma migrate dev --name <change>`.
   CHECK constraints are hand-written SQL appended to migrations (Prisma doesn't manage them).

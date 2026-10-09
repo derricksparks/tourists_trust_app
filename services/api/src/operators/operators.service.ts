@@ -3,13 +3,13 @@ import { AdminUser, Operator, Prisma } from '@prisma/client';
 import {
   OperatorCreateInput,
   OperatorDecisionInput,
+  OPERATOR_TRANSITIONS,
   OperatorListQuery,
   OperatorUpdateInput,
   Paginated,
 } from '@ttp/shared-types';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
-import { OPERATOR_TRANSITIONS } from './operator-transitions';
 
 export function slugify(text: string): string {
   return text
@@ -103,7 +103,7 @@ export class OperatorsService {
     return this.prisma.$transaction(async (tx) => {
       // Conditional update: two moderators deciding at once can't both succeed.
       const { count } = await tx.operator.updateMany({
-        where: { id, status: { in: from } },
+        where: { id, status: { in: [...from] } },
         data: {
           status: to,
           statusReason: decision === 'approve' ? null : reason,

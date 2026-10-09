@@ -120,6 +120,14 @@ describe('operator approval queue', () => {
     expect(await prisma.auditLog.count({ where: { entityId: id, action: { not: 'operator.create' } } })).toBe(1);
   });
 
+  it('edits an operator; null clears an optional field but not a required one', async () => {
+    const { id } = (await createOperator({ ...validOperator, websiteUrl: 'https://a.example.com' })).body;
+    const patch = (body: object) => http().patch(`/admin/operators/${id}`).set('Authorization', `Bearer ${modToken}`).send(body);
+    const res = await patch({ websiteUrl: null, address: 'Entebbe' }).expect(200);
+    expect(res.body).toMatchObject({ websiteUrl: null, address: 'Entebbe', name: validOperator.name });
+    await patch({ name: null }).expect(400);
+  });
+
   it('returns 404 for an unknown operator', async () => {
     await decide('00000000-0000-0000-0000-000000000000', { decision: 'approve' }).expect(404);
     await http().get('/admin/operators/00000000-0000-0000-0000-000000000000').set('Authorization', `Bearer ${modToken}`).expect(404);

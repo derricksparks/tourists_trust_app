@@ -215,7 +215,7 @@ Scoring formulas (TV-6) are undefined, e.g. median time from inquiry to first op
 |---|---|---|
 | 1 | Backend language | **TypeScript** — NestJS API, Prisma ORM, pnpm monorepo |
 | 2 | Hosting / Russian data residency (152-FZ) | **Not localising for now.** Users come from several countries; host wherever is best today and revisit later. Risk accepted by the product owner. |
-| 3 | Admin tooling | **Build in-repo** (`/apps/admin`), no Retool |
+| 3 | Admin tooling | **Build in-repo** (`/apps/admin`), no Retool. Built as a plain React + Vite app rather than React-Admin: the screens are workflow pages (approve/flag with reasons), not generic CRUD |
 | 4 | Content site rendering | **SSR/ISR** with on-demand revalidation, not a pure static export |
 | 5 | Data-model additions in B2 | **Accepted** — implemented in `services/api/prisma/schema.prisma` |
 | 6 | Review trust mechanism | **Invite-only**: a one-time link is sent to the traveller after the trip; a review can only be written through it |
