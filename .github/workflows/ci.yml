@@ -56,6 +56,8 @@ jobs:
       WEB_REVALIDATE_URL: http://localhost:3001/api/revalidate
       API_URL: http://localhost:3000
       SITE_URL: http://localhost:3001
+      # Browser tests run a stand-in for Telegram on 8099 (apps/web-content/e2e/fake-telegram.mjs)
+      TELEGRAM_API_BASE: http://localhost:8099
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

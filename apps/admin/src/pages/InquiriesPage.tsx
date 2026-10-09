@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError, Inquiry } from '../api';
 import { useCanModerate } from '../auth';
 import { Pager } from '../components/Pager';
+import { InviteLink } from '../components/ReviewInvites';
 import { StatusPill } from '../components/StatusPill';
 import { formatDateTime, titleCase } from '../format';
 
@@ -131,6 +132,46 @@ function InquiryCard({ inquiry: i }: { inquiry: Inquiry }) {
         </div>
       )}
       {i.status === 'CLOSED' && <p className="muted">{titleCase(i.status)}.</p>}
+      {canModerate && i.status !== 'NEW' && i.telegramUser && <InviteFromInquiry inquiry={i} who={who} />}
     </article>
+  );
+}
+
+/**
+ * After the trip, invite the traveller who asked through the bot to review the operator.
+ * These invites don't depend on the operator's own list, which keeps reviews honest.
+ */
+function InviteFromInquiry({ inquiry: i, who }: { inquiry: Inquiry; who: string }) {
+  const [open, setOpen] = useState(false);
+  const [tripDate, setTripDate] = useState(i.travelMonth ? `${i.travelMonth}-01` : new Date().toISOString().slice(0, 10));
+  const create = useMutation({
+    mutationFn: () =>
+      api.createInvite({ operatorId: i.operator.id, inquiryId: i.id, recipientName: who, recipientContact: i.contactInfo ?? 'Telegram', tripDate, sendTelegram: true }),
+  });
+  if (create.data) return <InviteLink link={create.data.link} sentInTelegram={create.data.sentInTelegram} />;
+  if (!open)
+    return (
+      <button className="btn" style={{ justifySelf: 'start' }} onClick={() => setOpen(true)}>
+        Invite to review after the trip
+      </button>
+    );
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <div className="row-wrap" style={{ alignItems: 'end' }}>
+        <div className="field">
+          <label htmlFor={`trip-${i.id}`}>Trip date</label>
+          <input id={`trip-${i.id}`} type="date" value={tripDate} onChange={(e) => setTripDate(e.target.value)} />
+        </div>
+        <button className="btn primary" disabled={create.isPending || !tripDate} onClick={() => create.mutate()}>
+          Send invite in Telegram
+        </button>
+        <button className="btn" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+      {create.error && (
+        <p className="alert err" role="alert">
+          {create.error instanceof ApiError ? create.error.message : 'Couldn’t create the invite.'}
+        </p>
+      )}
+    </div>
   );
 }

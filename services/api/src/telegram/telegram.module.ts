@@ -3,6 +3,7 @@ import {
   CanActivate,
   Controller,
   ExecutionContext,
+  Global,
   HttpException,
   HttpStatus,
   Injectable,
@@ -19,7 +20,9 @@ import { InquiryCreateInput, inquiryCreateSchema } from '@ttp/shared-types';
 import { Request } from 'express';
 import { PrismaService } from '../common/prisma.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { botInternalSecret, TelegramBotApi } from './bot-api';
 import { validateInitData } from './init-data';
+import { timingSafeEqual } from 'crypto';
 
 type TelegramRequest = Request & { telegramUser?: TelegramUser };
 
@@ -55,6 +58,19 @@ export class TelegramAuthGuard implements CanActivate {
       create: { telegramId: BigInt(user.id), ...profile },
       update: profile,
     });
+    return true;
+  }
+}
+
+/** Requests from our own bot process (button presses it forwards). */
+@Injectable()
+export class BotSecretGuard implements CanActivate {
+  canActivate(ctx: ExecutionContext): boolean {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) throw new ServiceUnavailableException('Telegram is not configured');
+    const given = Buffer.from(String(ctx.switchToHttp().getRequest<Request>().headers['x-bot-secret'] ?? ''));
+    const expected = Buffer.from(botInternalSecret(token));
+    if (given.length !== expected.length || !timingSafeEqual(given, expected)) throw new UnauthorizedException();
     return true;
   }
 }
@@ -106,5 +122,10 @@ export class TelegramController {
   }
 }
 
-@Module({ controllers: [TelegramController], providers: [TelegramAuthGuard] })
+@Global()
+@Module({
+  controllers: [TelegramController],
+  providers: [TelegramAuthGuard, BotSecretGuard, TelegramBotApi],
+  exports: [TelegramAuthGuard, BotSecretGuard, TelegramBotApi],
+})
 export class TelegramModule {}

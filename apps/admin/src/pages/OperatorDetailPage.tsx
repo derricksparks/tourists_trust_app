@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useCanModerate } from '../auth';
 import { DecisionOption, DecisionPanel } from '../components/DecisionPanel';
+import { ReviewInvitesPanel } from '../components/ReviewInvites';
 import { StatusPill } from '../components/StatusPill';
 import { ACTION_LABELS, formatDate, formatDateTime } from '../format';
 
@@ -185,6 +186,8 @@ export function OperatorDetailPage() {
           </section>
 
           <BadgeCode token={op.badgeToken} status={op.status} />
+
+          <ReviewInvitesPanel operatorId={op.id} approved={op.status === 'APPROVED'} />
 
           <section className="panel" aria-labelledby="history">
             <h2 id="history">History</h2>

@@ -158,6 +158,8 @@ export interface AdminStats {
   operatorsByStatus: Record<OperatorStatus, number>;
   reviewsPending: number;
   inquiriesNew: number;
+  translatorsPending: number;
+  translationJobsOpen: number; // REQUESTED: waiting for staff to find a translator
   listingsLive: number; // published packages from approved operators
   dmcsOnboarded: number; // approved DMCs
   quoteRequests: number;
@@ -356,3 +358,194 @@ export const destinationGuideCreateSchema = z.object({
 export type DestinationGuideCreateInput = z.infer<typeof destinationGuideCreateSchema>;
 export const destinationGuideUpdateSchema = destinationGuideCreateSchema.partial();
 export type DestinationGuideUpdateInput = z.infer<typeof destinationGuideUpdateSchema>;
+
+// ─── Phase 2: translators & guides network (TR-1…TR-4) ───────────────────────
+
+export const TRANSLATOR_STATUSES = ['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED'] as const;
+export type TranslatorStatus = (typeof TRANSLATOR_STATUSES)[number];
+
+export const TRANSLATOR_DECISIONS = ['verify', 'reject', 'suspend'] as const;
+export type TranslatorDecision = (typeof TRANSLATOR_DECISIONS)[number];
+
+/** Verification after a spot-check (TR-1). Suspending removes them from the directory; verifying again restores them. */
+export const TRANSLATOR_TRANSITIONS: Record<TranslatorDecision, { from: readonly TranslatorStatus[]; to: TranslatorStatus }> = {
+  verify: { from: ['PENDING', 'SUSPENDED'], to: 'VERIFIED' },
+  reject: { from: ['PENDING'], to: 'REJECTED' },
+  suspend: { from: ['VERIFIED'], to: 'SUSPENDED' },
+};
+
+/** Every decision records what was checked or why: e.g. "20-min video call in Russian, fluent". */
+export const translatorDecisionSchema = z.object({
+  decision: z.enum(TRANSLATOR_DECISIONS),
+  notes: z.string().trim().min(3, 'Write what you checked, or why'),
+});
+export type TranslatorDecisionInput = z.infer<typeof translatorDecisionSchema>;
+
+export const LANGUAGES: Record<string, string> = {
+  ru: 'русский', en: 'английский', sw: 'суахили', fr: 'французский', ar: 'арабский',
+  lg: 'луганда', rw: 'киньяруанда', de: 'немецкий', it: 'итальянский', zh: 'китайский',
+};
+export const PROFICIENCY_LEVELS = ['A2', 'B1', 'B2', 'C1', 'C2', 'native'] as const;
+export const SPECIALTIES: Record<string, string> = {
+  safari_guide: 'гид на сафари',
+  city_guide: 'городской гид',
+  documents: 'перевод документов',
+  live_interpretation: 'устный перевод',
+  medical: 'медицина',
+  legal: 'юридические вопросы',
+  business: 'деловые встречи',
+};
+const languageCode = z.string().refine((l) => l in LANGUAGES, 'Unknown language');
+const specialty = z.string().refine((s) => s in SPECIALTIES, 'Unknown specialty');
+const TRANSLATOR_COUNTRIES = ['UG', 'TZ', 'KE', 'RW'] as const;
+
+/** Self sign-up from the Telegram Mini App (TR-1). Proficiency is self-reported; staff spot-check before listing. */
+export const translatorSignupSchema = z
+  .object({
+    name: z.string().trim().min(2).max(100),
+    languages: z.array(languageCode).min(2, 'Укажите хотя бы два языка').max(8),
+    proficiency: z.record(languageCode, z.enum(PROFICIENCY_LEVELS)),
+    specialtyCountryCode: z.enum(TRANSLATOR_COUNTRIES),
+    specialties: z.array(specialty).min(1, 'Выберите хотя бы одно направление'),
+    bioRu: z.string().trim().max(1000).optional(),
+    phone: z.string().trim().max(40).optional(),
+    consent: z.literal(true, { errorMap: () => ({ message: 'Нужно согласие на публикацию профиля' }) }),
+  })
+  .refine((t) => t.languages.includes('ru'), { message: 'Нужен русский язык', path: ['languages'] })
+  .refine((t) => t.languages.every((l) => l in t.proficiency), { message: 'Укажите уровень для каждого языка', path: ['proficiency'] });
+export type TranslatorSignupInput = z.infer<typeof translatorSignupSchema>;
+
+/** Directory entry (TR-2). No contact details: travellers reach translators through a request. */
+export interface PublicTranslator {
+  id: string;
+  name: string;
+  languages: string[];
+  proficiency: Record<string, string>;
+  specialtyCountryCode: string;
+  specialties: string[];
+  bioRu: string | null;
+  jobsCompleted: number;
+  rating: number | null;
+}
+
+export const TRANSLATION_JOB_STATUSES = ['REQUESTED', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as const;
+export type TranslationJobStatus = (typeof TRANSLATION_JOB_STATUSES)[number];
+
+/**
+ * A traveller's request from the Mini App (TR-3), addressed to a translator from the directory.
+ * REQUESTED: needs a translator (staff assign) · ASSIGNED: offer sent, waiting for the translator ·
+ * IN_PROGRESS: accepted, contacts exchanged · COMPLETED (rated by the traveller) · CANCELLED.
+ */
+export const translationJobCreateSchema = z
+  .object({
+    translatorId: z.string().uuid(),
+    type: z.enum(['DOCUMENT', 'LIVE']),
+    sourceLanguage: languageCode,
+    targetLanguage: languageCode,
+    description: z.string().trim().min(10, 'Опишите задачу в двух-трёх предложениях').max(2000),
+    deadline: z.string().date().optional(),
+    scheduledAt: z.string().datetime({ offset: true }).optional(),
+    consent: z.literal(true, { errorMap: () => ({ message: 'Нужно согласие на передачу контакта переводчику' }) }),
+  })
+  .refine((j) => j.sourceLanguage !== j.targetLanguage, { message: 'Языки должны различаться', path: ['targetLanguage'] });
+export type TranslationJobCreateInput = z.infer<typeof translationJobCreateSchema>;
+
+export const translationJobListQuerySchema = z.object({
+  status: z.enum(TRANSLATION_JOB_STATUSES).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+});
+export type TranslationJobListQuery = z.infer<typeof translationJobListQuerySchema>;
+
+export const translationJobAssignSchema = z.object({ translatorId: z.string().uuid() });
+export const translationJobCancelSchema = z.object({ reason: z.string().trim().min(3) });
+
+/** Button presses in the bot, forwarded by the bot process to the API. */
+export const BOT_JOB_ACTIONS = ['accept', 'decline', 'complete'] as const;
+export const botJobActionSchema = z.object({ telegramId: z.number().int(), action: z.enum(BOT_JOB_ACTIONS) });
+export const botJobRatingSchema = z.object({ telegramId: z.number().int(), rating: z.number().int().min(1).max(5) });
+
+// ─── Phase 2: insurers (IN-1, IN-2) ──────────────────────────────────────────
+
+export const insurerCreateSchema = z.object({
+  name: z.string().trim().min(2),
+  nameRu: z.string().trim().min(1).nullable().optional(),
+  websiteUrl: z.string().trim().url().nullable().optional(),
+  countriesCovered: z.array(countryCode).min(1),
+  claimsContact: z.string().trim().min(3),
+  repatriationConfirmed: z.boolean().default(false),
+  coverageRu: z.string().trim().min(1).nullable().optional(),
+  exclusionsRu: z.string().trim().min(1).nullable().optional(),
+  medicalLimitInfo: z.string().trim().min(1).nullable().optional(),
+  notes: z.string().trim().min(1).nullable().optional(),
+  published: z.boolean().default(false),
+  /** Tick after confirming claims and repatriation capability by direct contact; stamps verified_at. */
+  factsVerified: z.boolean().optional(),
+});
+export type InsurerCreateInput = z.infer<typeof insurerCreateSchema>;
+export const insurerUpdateSchema = insurerCreateSchema.partial();
+export type InsurerUpdateInput = z.infer<typeof insurerUpdateSchema>;
+
+/** Comparison table row. Internal notes are never public. */
+export interface PublicInsurer {
+  id: string;
+  name: string;
+  nameRu: string | null;
+  websiteUrl: string | null;
+  countriesCovered: string[];
+  claimsContact: string;
+  repatriationConfirmed: boolean;
+  coverageRu: string | null;
+  exclusionsRu: string | null;
+  medicalLimitInfo: string | null;
+  verifiedAt: string | null;
+}
+
+// ─── Phase 2: review invites and submission (TV-5) ───────────────────────────
+
+export const reviewInviteCreateSchema = z.object({
+  operatorId: z.string().uuid(),
+  packageId: z.string().uuid().optional(),
+  inquiryId: z.string().uuid().optional(),
+  recipientName: z.string().trim().min(1),
+  recipientContact: z.string().trim().min(3),
+  tripDate: z.string().date(),
+  expiresInDays: z.number().int().min(1).max(365).default(60),
+  /** For an invite made from a Telegram inquiry: also send the link to the traveller in the bot. */
+  sendTelegram: z.boolean().default(true),
+});
+export type ReviewInviteCreateInput = z.infer<typeof reviewInviteCreateSchema>;
+
+export type ReviewInviteState = 'open' | 'used' | 'expired' | 'revoked';
+
+/** Per-operator check on cherry-picking: how many invites went out and how many became reviews. */
+export interface InviteStats {
+  sent: number;
+  used: number;
+  open: number;
+  expired: number;
+  revoked: number;
+  published: number;
+  fromInquiries: number;
+}
+
+export interface PublicReviewInvite {
+  state: ReviewInviteState;
+  operatorName: string;
+  operatorSlug: string;
+  packageTitle: string | null;
+  recipientName: string;
+  tripDate: string;
+}
+
+export const reviewSubmitSchema = z.object({
+  authorName: z.string().trim().min(1).max(60),
+  rating: z.number().int().min(1).max(5),
+  ratingGuide: z.number().int().min(1).max(5).optional(),
+  ratingVehicle: z.number().int().min(1).max(5).optional(),
+  ratingAccommodation: z.number().int().min(1).max(5).optional(),
+  ratingValue: z.number().int().min(1).max(5).optional(),
+  bodyRu: z.string().trim().min(30, 'Напишите хотя бы пару предложений о поездке').max(4000),
+  consent: z.literal(true, { errorMap: () => ({ message: 'Нужно согласие на публикацию отзыва' }) }),
+});
+export type ReviewSubmitInput = z.infer<typeof reviewSubmitSchema>;

@@ -5,6 +5,9 @@ import { PrismaModule } from './common/prisma.module';
 import { RevalidationModule } from './common/revalidation.service';
 import { ContentModule } from './content/content.module';
 import { InquiriesModule } from './inquiries/inquiries.module';
+import { InsurersModule } from './insurers/insurers.module';
+import { ReviewInvitesModule } from './review-invites/review-invites.module';
+import { TranslatorsModule } from './translators/translators.module';
 import { PublicModule } from './public/public.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { HealthController } from './health/health.controller';
@@ -23,6 +26,9 @@ import { ReviewsModule } from './reviews/reviews.module';
     ContentModule,
     PublicModule,
     TelegramModule,
+    TranslatorsModule,
+    InsurersModule,
+    ReviewInvitesModule,
   ],
   controllers: [HealthController],
 })

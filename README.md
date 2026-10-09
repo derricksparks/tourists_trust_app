@@ -44,6 +44,8 @@ pnpm dev:web                                 # public site on http://localhost:3
    (for local testing, a tunnel such as `cloudflared` or `ngrok` in front of port 3001).
 5. `pnpm dev:bot`. In BotFather, also set the bot's Mini App URL to `SITE_URL/tg`.
 
+Demo review link (seeded, works once per seed): `http://localhost:3001/review/demo-review-link-kilima-horizon-0000000001`.
+
 ### Verification badge
 
 Each operator's page in the dashboard has its embed code. Operators paste it into their own site:
@@ -78,4 +80,9 @@ checklists, travel guides, sitemap), the embeddable verification badge, the Tele
 ("request info"), and admin screens for the inquiry inbox (reply to travellers through the bot) and
 for editing visa and travel guides. Seed data has 12 approved demo operators.
 
-Next: Phase 2 (translator network, insurer comparison, review invites and submission).
+**Phase 2 done** — translator and guide network (sign-up and requests in the Telegram Mini App, staff
+verification, public directory, offers accepted in the bot with a contact hand-off, ratings after the
+job), insurer comparison page, and invite-only reviews (links from the dashboard or straight from an
+answered inquiry, a one-time review form, invites-vs-reviews per operator).
+
+Next: Phase 3 (operator package feed, DMC wholesale portal, fam-trip tool).

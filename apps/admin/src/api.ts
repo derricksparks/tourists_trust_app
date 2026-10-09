@@ -9,6 +9,14 @@ import type {
   DestinationGuideUpdateInput,
   GuideKind,
   InquiryStatus,
+  InsurerCreateInput,
+  InsurerUpdateInput,
+  InviteStats,
+  ReviewInviteCreateInput,
+  ReviewInviteState,
+  TranslationJobStatus,
+  TranslatorDecisionInput,
+  TranslatorStatus,
   OperatorCreateInput,
   OperatorDecisionInput,
   OperatorStatus,
@@ -138,6 +146,81 @@ export interface DestinationGuide {
   updatedAt: string;
 }
 
+export interface Translator {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  telegramUsername: string | null;
+  languages: string[];
+  proficiency: Record<string, string>;
+  specialtyCountryCode: string;
+  specialties: string[];
+  bioRu: string | null;
+  verificationStatus: TranslatorStatus;
+  spotCheckNotes: string | null;
+  spotCheckedAt: string | null;
+  spotCheckedBy: { name: string } | null;
+  jobsCompleted: number;
+  rating: string | null;
+  createdAt: string;
+  telegramUser: { username: string | null } | null;
+  _count?: { jobs: number };
+}
+
+export interface TranslationJob {
+  id: string;
+  type: 'DOCUMENT' | 'LIVE';
+  status: TranslationJobStatus;
+  requesterType: 'TOURIST' | 'OPERATOR' | 'DMC';
+  sourceLanguage: string;
+  targetLanguage: string;
+  description: string | null;
+  deadline: string | null;
+  scheduledAt: string | null;
+  rating: number | null;
+  completedAt: string | null;
+  createdAt: string;
+  translator: { id: string; name: string; telegramUser: { username: string | null } | null } | null;
+  requesterTelegramUser: { username: string | null; firstName: string | null; lastName: string | null } | null;
+  requesterOperator: { id: string; name: string } | null;
+  requesterDmc: { id: string; name: string } | null;
+}
+
+export interface Insurer {
+  id: string;
+  name: string;
+  nameRu: string | null;
+  websiteUrl: string | null;
+  countriesCovered: string[];
+  claimsContact: string;
+  repatriationConfirmed: boolean;
+  coverageRu: string | null;
+  exclusionsRu: string | null;
+  medicalLimitInfo: string | null;
+  notes: string | null;
+  published: boolean;
+  verifiedAt: string | null;
+  verifiedBy: { name: string } | null;
+}
+
+export interface ReviewInvite {
+  id: string;
+  recipientName: string;
+  recipientContact: string;
+  tripDate: string;
+  expiresAt: string;
+  usedAt: string | null;
+  revokedAt: string | null;
+  inquiryId: string | null;
+  createdAt: string;
+  state: ReviewInviteState;
+  operator: { id: string; name: string };
+  package: { title: string } | null;
+  review: { id: string; status: string; rating: number } | null;
+  issuedBy: { name: string };
+}
+
 export interface AdminProfile {
   id: string;
   name: string;
@@ -233,6 +316,23 @@ export const api = {
   guide: (id: string) => request<DestinationGuide>('GET', `/admin/guides/${id}`),
   createGuide: (body: DestinationGuideCreateInput) => request<DestinationGuide>('POST', '/admin/guides', body),
   updateGuide: (id: string, body: DestinationGuideUpdateInput) => request<DestinationGuide>('PATCH', `/admin/guides/${id}`, body),
+
+  translators: (status?: TranslatorStatus) => request<Translator[]>('GET', `/admin/translators${qs({ status })}`),
+  decideTranslator: (id: string, body: TranslatorDecisionInput) => request<Translator>('POST', `/admin/translators/${id}/decision`, body),
+  translationJobs: (p: { status?: TranslationJobStatus; page?: number }) => request<Paginated<TranslationJob>>('GET', `/admin/translation-jobs${qs(p)}`),
+  assignJob: (id: string, translatorId: string) => request<{ job: TranslationJob; offerDelivered: boolean }>('POST', `/admin/translation-jobs/${id}/assign`, { translatorId }),
+  cancelJob: (id: string, reason: string) => request<TranslationJob>('POST', `/admin/translation-jobs/${id}/cancel`, { reason }),
+
+  insurers: () => request<Insurer[]>('GET', '/admin/insurers'),
+  insurer: (id: string) => request<Insurer>('GET', `/admin/insurers/${id}`),
+  createInsurer: (body: InsurerCreateInput) => request<Insurer>('POST', '/admin/insurers', body),
+  updateInsurer: (id: string, body: InsurerUpdateInput) => request<Insurer>('PATCH', `/admin/insurers/${id}`, body),
+
+  reviewInvites: (operatorId?: string) => request<ReviewInvite[]>('GET', `/admin/review-invites${qs({ operatorId })}`),
+  inviteStats: (operatorId: string) => request<InviteStats>('GET', `/admin/operators/${operatorId}/invite-stats`),
+  createInvite: (body: Partial<ReviewInviteCreateInput>) =>
+    request<{ invite: ReviewInvite; link: string; sentInTelegram: boolean }>('POST', '/admin/review-invites', body),
+  revokeInvite: (id: string) => request<{ ok: true }>('POST', `/admin/review-invites/${id}/revoke`),
 
   reviews: (p: { status?: ReviewStatus; page?: number }) => request<Paginated<Review>>('GET', `/admin/reviews${qs(p)}`),
   decideReview: (id: string, body: ReviewDecisionInput) => request<Review>('POST', `/admin/reviews/${id}/decision`, body),

@@ -5,6 +5,8 @@ import { useAuth } from './auth';
 import { GuideFormPage, GuidesPage, VisaGuideFormPage, VisaGuidesPage } from './pages/ContentPages';
 import { DashboardPage } from './pages/DashboardPage';
 import { InquiriesPage } from './pages/InquiriesPage';
+import { InsurerFormPage, InsurersPage } from './pages/InsurerPages';
+import { TranslationJobsPage, TranslatorsPage } from './pages/TranslatorPages';
 import { LoginPage } from './pages/LoginPage';
 import { OperatorDetailPage } from './pages/OperatorDetailPage';
 import { OperatorFormPage } from './pages/OperatorFormPage';
@@ -31,6 +33,11 @@ export function App() {
           <Route path="guides" element={<GuidesPage />} />
           <Route path="guides/new" element={<GuideFormPage />} />
           <Route path="guides/:id" element={<GuideFormPage />} />
+          <Route path="translators" element={<TranslatorsPage />} />
+          <Route path="translation-jobs" element={<TranslationJobsPage />} />
+          <Route path="insurers" element={<InsurersPage />} />
+          <Route path="insurers/new" element={<InsurerFormPage />} />
+          <Route path="insurers/:id" element={<InsurerFormPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>
@@ -53,6 +60,8 @@ function Shell() {
   const pendingOperators = stats.data?.operatorsByStatus.PENDING;
   const pendingReviews = stats.data?.reviewsPending;
   const newInquiries = stats.data?.inquiriesNew;
+  const pendingTranslators = stats.data?.translatorsPending;
+  const openJobs = stats.data?.translationJobsOpen;
 
   return (
     <div className="shell">
@@ -74,8 +83,15 @@ function Shell() {
           <NavLink to="/inquiries">
             Inquiries {!!newInquiries && <span className="count" aria-label={`${newInquiries} new`}>{newInquiries}</span>}
           </NavLink>
+          <NavLink to="/translators">
+            Translators {!!pendingTranslators && <span className="count" aria-label={`${pendingTranslators} to check`}>{pendingTranslators}</span>}
+          </NavLink>
+          <NavLink to="/translation-jobs">
+            Translation requests {!!openJobs && <span className="count" aria-label={`${openJobs} need a translator`}>{openJobs}</span>}
+          </NavLink>
           <NavLink to="/visa-guides">Visa guides</NavLink>
           <NavLink to="/guides">Travel guides</NavLink>
+          <NavLink to="/insurers">Insurers</NavLink>
         </nav>
         <div className="who">
           <span>

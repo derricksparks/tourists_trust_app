@@ -133,3 +133,27 @@ a.card:hover { border-color: var(--seal); }
 .article ul, .article ol { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Comparison table (insurance) */
+.table-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+table.compare { border-collapse: collapse; width: 100%; min-width: 860px; font-size: 0.94rem; }
+.compare th, .compare td { text-align: left; vertical-align: top; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.compare thead th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.compare tbody tr:last-child > * { border-bottom: 0; }
+.compare tbody th { font-weight: 600; min-width: 160px; }
+.compare .yes { color: var(--seal); font-weight: 600; white-space: nowrap; }
+.small { font-size: 0.82rem; font-weight: 400; }
+
+/* Forms on the public site (review) */
+.form { display: grid; gap: 16px; max-width: 640px; }
+.form .field { display: grid; gap: 6px; }
+.form label, .form legend { font-weight: 600; }
+.form input[type="text"], .form textarea { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); width: 100%; }
+.form textarea { min-height: 150px; resize: vertical; }
+.form fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+.rating { display: flex; gap: 4px; }
+.rating button { font-size: 1.7rem; line-height: 1; background: none; border: 0; padding: 4px; cursor: pointer; color: var(--line); }
+.rating button[aria-checked="true"] { color: var(--ochre); }
+.rating-row { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; }
+.rating-row .label { min-width: 120px; color: var(--muted); }
+.error { color: var(--danger); font-size: 0.9rem; }

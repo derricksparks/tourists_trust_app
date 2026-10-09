@@ -249,6 +249,8 @@ These keep the meaning of the spec's fields but change how they are stored:
 | `AdminUser` (id, name, role) | adds `email`, `password_hash`, `active` | admin login |
 | `VisaGuide.country` | `country_code` (primary) + `covered_countries[]` | East African Tourist Visa spans KE/UG/RW |
 | `VisaGuide.requirements_ru` | + structured `checklist_items` | VI-2 checklist generator |
+| *(Phase 2, approved 2026-10-09)* `Translator` | + `telegram_user_id` (unique, nullable) | translators sign up and get job offers in the bot |
+| *(Phase 2, approved 2026-10-09)* `ReviewInvite` | + `inquiry_id` (unique, nullable) | invite the traveller who asked through the bot; one invite per inquiry |
 
 ---
 
@@ -275,3 +277,22 @@ These keep the meaning of the spec's fields but change how they are stored:
   and `public/badge.js`.
 - **Visa content:** the four seeded visa guides are published so the pages can be seen, but their text is
   placeholder marked ДЕМО-ТЕКСТ. An editor must replace it with checked facts before launch.
+
+### Phase 2 (translators, insurers, reviews)
+
+- **Schema:** two approved additions, `translators.telegram_user_id` and `review_invites.inquiry_id` (B6).
+- **Translators (TR-1…TR-4):** people apply in the Mini App with self-reported levels; staff verify after a spot-check
+  and must write down what they checked. The directory shows no contact details. A traveller picks a translator
+  and sends a request; the offer goes to the translator in the bot (Accept / Decline). Accepting sends each side the
+  other's Telegram contact: that is the "real-time chat handoff" for live interpretation. When the translator marks
+  the job done, the traveller rates it 1–5 in the bot; `translators.jobs_completed` and `rating` are recomputed.
+  Declined or undeliverable requests go to a staff queue to reassign.
+- **Documents for translation** are exchanged in Telegram after acceptance; nothing is uploaded to us yet (no file
+  storage in v1), so `translation_jobs.document_storage_key` stays empty for Mini App requests.
+- **Insurers (IN-1, IN-2):** editors maintain the comparison; "verified" stamps `verified_at` after a direct call;
+  internal notes are never public. No sales, no affiliate links.
+- **Reviews (TV-5, decision B5.6):** invite links are random 32-byte tokens, stored only as SHA-256, shown to staff once,
+  valid 60 days by default, usable once (claimed atomically). Invites can be made from an answered Telegram inquiry,
+  which also sends the link in the bot. Each operator page in the dashboard shows invites sent vs reviews written and
+  how many invites went to travellers who asked through our bot rather than the operator's own list, with a nudge
+  when every invite came from the operator.

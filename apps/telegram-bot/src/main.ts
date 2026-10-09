@@ -1,5 +1,6 @@
 import { Bot, configureBot } from './bot';
 import { HttpCoreApi } from './core';
+import { createHmac } from 'node:crypto';
 import { HttpBotApi, TelegramError, Update } from './telegram';
 
 /**
@@ -13,7 +14,9 @@ async function main() {
   if (!siteUrl.startsWith('https://')) console.warn('SITE_URL is not HTTPS: Telegram will refuse to open the Mini App buttons.');
 
   const telegram = new HttpBotApi(token, process.env.TELEGRAM_API_BASE);
-  const bot = new Bot(telegram, new HttpCoreApi(process.env.API_URL ?? 'http://localhost:3000'), { siteUrl });
+  // Same derivation as botInternalSecret() in the API, so the bot needs no extra setting.
+  const botSecret = createHmac('sha256', token).update('ttp-bot-internal').digest('hex');
+  const bot = new Bot(telegram, new HttpCoreApi(process.env.API_URL ?? 'http://localhost:3000', botSecret), { siteUrl });
 
   await telegram.call('deleteWebhook', {});
   await configureBot(telegram, { siteUrl }).catch((e: Error) => console.warn(`Bot setup skipped: ${e.message}`));

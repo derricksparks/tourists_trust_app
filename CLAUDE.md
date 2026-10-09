@@ -23,11 +23,17 @@ Pinned versions are deliberate; don't bump majors without asking.
 - `pnpm typecheck`, `pnpm test` (API tests need Postgres; they use the `ttp_test` database)
 - `pnpm e2e` — dashboard and site browser tests; needs the API running, re-seeds its database, and the
   site built (`pnpm --filter @ttp/web-content build`). Set `PW_CHROMIUM_PATH` if Playwright's browser isn't installed.
+  Start the API with `TELEGRAM_API_BASE=http://localhost:8099`: the suites run a fake Telegram there and check what was sent.
+- Telegram from the API: `TelegramBotApi` (send only). The bot process forwards button presses to `/bot/*`,
+  authenticated with `X-Bot-Secret` = HMAC-SHA256(bot token, "ttp-bot-internal"); no extra secret to configure.
 - Public endpoints (`/public/*`) must only ever return approved operators and published content, and never
   internal fields (status reasons, reference contacts, documents, badge tokens). `test/public.e2e.spec.ts` checks this.
 - Public site pages read the API at request time with tag-cached fetches (`lib/api.ts`); the API calls
   `/api/revalidate` after changes. Building the site must not need the API.
-- Workflow rules (`OPERATOR_TRANSITIONS`, `REVIEW_TRANSITIONS`) and request schemas live in
+- Workflow rules (`OPERATOR_TRANSITIONS`, `REVIEW_TRANSITIONS`, `TRANSLATOR_TRANSITIONS`) and request schemas live in
   `packages/shared-types` and are used by both the API and the dashboard — change them there only.
 - Schema change: edit `schema.prisma`, then `cd services/api && npx prisma migrate dev --name <change>`.
   CHECK constraints are hand-written SQL appended to migrations (Prisma doesn't manage them).
+  If `migrate dev` refuses because it wants to ask about a warning (non-interactive shell), write the SQL with
+  `prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma
+  --shadow-database-url <empty db> --script` into a new migration folder, then `prisma migrate deploy`.

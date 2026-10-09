@@ -47,6 +47,14 @@ export function DashboardPage() {
                 <span className="value">{data.inquiriesNew}</span>
                 <span>Traveller questions to answer</span>
               </Link>
+              <Link to="/translators" className={`tile ${data.translatorsPending ? 'attention' : ''}`}>
+                <span className="value">{data.translatorsPending}</span>
+                <span>Translators to check</span>
+              </Link>
+              <Link to="/translation-jobs" className={`tile ${data.translationJobsOpen ? 'attention' : ''}`}>
+                <span className="value">{data.translationJobsOpen}</span>
+                <span>Translation requests without a translator</span>
+              </Link>
             </div>
           </section>
 

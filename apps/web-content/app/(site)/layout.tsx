@@ -40,6 +40,8 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
               <Link href="/operators">Туроператоры</Link>
               <Link href="/visa">Визы</Link>
               <Link href="/guides">Как добраться</Link>
+              <Link href="/translators">Переводчики</Link>
+              <Link href="/insurance">Страховка</Link>
               <a href={telegramLink()}>Telegram</a>
             </nav>
           </div>

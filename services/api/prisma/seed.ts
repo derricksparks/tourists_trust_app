@@ -170,7 +170,8 @@ async function main() {
   });
 
   // ── Reviews: only through invite links ──
-  const demoInviteTokens = ['demo-invite-used-1', 'demo-invite-used-2', 'demo-invite-open-1'];
+  // The open one is a working demo link: SITE_URL/review/demo-review-link-kilima-horizon-0000000001
+  const demoInviteTokens = ['demo-review-link-pearl-gorilla-0000000001', 'demo-review-link-pearl-gorilla-0000000002', 'demo-review-link-kilima-horizon-0000000001'];
   const [inv1, inv2] = await Promise.all(
     demoInviteTokens.map((t, i) =>
       prisma.reviewInvite.create({
@@ -218,16 +219,40 @@ async function main() {
   });
   await prisma.inquiry.create({ data: { telegramUserId: tourist.id, operatorId: kilima.id, contactName: 'Ольга', contactInfo: '@demo_tourist', message: 'Сколько стоит сафари на 5 дней? (демо)' } });
 
-  // ── Translators ──
+  // ── Translators (Phase 2: linked to Telegram so offers reach them in the bot) ──
+  const tgUser = (id: number, username: string, firstName: string) =>
+    prisma.telegramUser.create({ data: { telegramId: BigInt(id), username, firstName, languageCode: 'ru', consentAt: new Date() } });
+  const verified = { verificationStatus: 'VERIFIED' as const, spotCheckedAt: new Date('2026-09-02T00:00:00Z'), spotCheckedById: moderator.id };
   const tr = await prisma.translator.create({
-    data: { name: 'Demo Translator Amina', telegramUsername: 'demo_amina', languages: ['ru', 'en', 'sw'], proficiency: { ru: 'C1', en: 'C2', sw: 'native' },
-      specialtyCountryCode: 'TZ', specialties: ['safari_guide', 'documents'], bioRu: 'Гид и переводчик в Аруше. (демо)', verificationStatus: 'VERIFIED',
-      spotCheckedAt: new Date('2026-09-02T00:00:00Z'), spotCheckedById: moderator.id, spotCheckNotes: 'Video call in Russian, fluent (demo).', jobsCompleted: 1, rating: 5 },
+    data: { name: 'Амина (демо)', telegramUsername: 'demo_amina', telegramUserId: (await tgUser(100000101, 'demo_amina', 'Amina')).id,
+      languages: ['ru', 'en', 'sw'], proficiency: { ru: 'C1', en: 'C2', sw: 'native' }, specialtyCountryCode: 'TZ', specialties: ['safari_guide', 'documents', 'live_interpretation'],
+      bioRu: 'Гид и переводчик в Аруше, училась в Москве. (демо)', spotCheckNotes: 'Video call in Russian, fluent (demo).', jobsCompleted: 1, rating: 5, ...verified },
   });
-  await prisma.translator.create({ data: { name: 'Demo Translator Joseph', languages: ['ru', 'en'], proficiency: { ru: 'B2' }, specialtyCountryCode: 'UG', specialties: ['live_interpretation'] } });
+  const peter = await prisma.translator.create({
+    data: { name: 'Питер (демо)', telegramUsername: 'demo_peter', telegramUserId: (await tgUser(100000102, 'demo_peter', 'Peter')).id,
+      languages: ['ru', 'en', 'lg'], proficiency: { ru: 'B2', en: 'C2', lg: 'native' }, specialtyCountryCode: 'UG', specialties: ['city_guide', 'live_interpretation', 'business'],
+      bioRu: 'Кампала и Энтеббе: встречи, рынки, деловые переговоры. (демо)', spotCheckNotes: 'Phone call in Russian; slower but clear (demo).', ...verified },
+  });
+  await prisma.translator.create({
+    data: { name: 'Ванджиру (демо)', telegramUsername: 'demo_wanjiru', telegramUserId: (await tgUser(100000103, 'demo_wanjiru', 'Wanjiru')).id,
+      languages: ['ru', 'en', 'sw'], proficiency: { ru: 'C1', en: 'native', sw: 'native' }, specialtyCountryCode: 'KE', specialties: ['medical', 'documents', 'legal'],
+      bioRu: 'Медицинский и юридический перевод в Найроби. (демо)', spotCheckNotes: 'Translated a sample medical form (demo).', ...verified },
+  });
+  await prisma.translator.create({
+    data: { name: 'Джозеф (демо)', telegramUsername: 'demo_joseph', telegramUserId: (await tgUser(100000104, 'demo_joseph', 'Joseph')).id,
+      languages: ['ru', 'en'], proficiency: { ru: 'B1', en: 'C1' }, specialtyCountryCode: 'UG', specialties: ['live_interpretation'], bioRu: 'Учил русский в Казани. (демо)' },
+  });
   await prisma.translationJob.create({
     data: { translatorId: tr.id, requesterType: 'TOURIST', requesterTelegramUserId: tourist.id, type: 'LIVE', status: 'COMPLETED', sourceLanguage: 'ru', targetLanguage: 'sw',
       description: 'Помощь на рынке в Аруше (демо)', completedAt: new Date('2026-09-15T00:00:00Z'), rating: 5, feedback: 'Спасибо! (демо)' },
+  });
+  await prisma.translationJob.create({
+    data: { translatorId: peter.id, requesterType: 'TOURIST', requesterTelegramUserId: tourist.id, type: 'LIVE', status: 'ASSIGNED', sourceLanguage: 'ru', targetLanguage: 'en',
+      description: 'Встреча с поставщиком в Кампале, нужен переводчик на 3 часа. (демо)', scheduledAt: new Date('2027-02-12T07:00:00Z') },
+  });
+  await prisma.translationJob.create({
+    data: { requesterType: 'TOURIST', requesterTelegramUserId: tourist.id, type: 'DOCUMENT', status: 'REQUESTED', sourceLanguage: 'ru', targetLanguage: 'en',
+      description: 'Перевести справку о прививках для поездки. Выбранный переводчик отказался. (демо)', deadline: day('2027-01-20') },
   });
   await prisma.translationJob.create({
     data: { requesterType: 'OPERATOR', requesterOperatorId: kilima.id, type: 'DOCUMENT', sourceLanguage: 'en', targetLanguage: 'ru', description: 'Translate package description (demo)', documentStorageKey: 'demo/kilima/package.docx' },
@@ -236,10 +261,15 @@ async function main() {
   // ── Insurers (fictional) ──
   await prisma.insurer.createMany({
     data: [
-      { name: 'Demo Strakhovanie A', nameRu: 'Демо Страхование А', countriesCovered: ['UG', 'TZ', 'KE'], claimsContact: '+7 000 000-00-00 (demo)', repatriationConfirmed: true,
-        coverageRu: 'Медицинские расходы, эвакуация, репатриация (демо)', exclusionsRu: 'Альпинизм выше 5000 м (демо)', medicalLimitInfo: 'up to 50 000 EUR (demo)', verifiedAt: new Date('2026-09-01T00:00:00Z'), verifiedById: admin.id, published: true },
+      { name: 'Demo Strakhovanie A', nameRu: 'Демо Страхование А', websiteUrl: 'https://insurer-a.example.com', countriesCovered: ['UG', 'TZ', 'KE'], claimsContact: '+7 000 000-00-00 (demo)', repatriationConfirmed: true,
+        coverageRu: 'Медицинские расходы, эвакуация, репатриация (демо)', exclusionsRu: 'Альпинизм выше 5000 м (демо)', medicalLimitInfo: 'до 50 000 € (демо)', verifiedAt: new Date('2026-09-01T00:00:00Z'), verifiedById: admin.id, published: true },
       { name: 'Demo Strakhovanie B', nameRu: 'Демо Страхование Б', countriesCovered: ['KE'], claimsContact: 'claims@insurer-b.example.com', repatriationConfirmed: false,
         coverageRu: 'Только медицинские расходы (демо)', notes: 'Repatriation not yet confirmed by phone.' },
+      { name: 'Demo Strakhovanie C', nameRu: 'Демо Страхование В', websiteUrl: 'https://insurer-c.example.com', countriesCovered: ['UG', 'TZ', 'KE', 'RW'], claimsContact: '+7 000 111-11-11 (demo)', repatriationConfirmed: true,
+        coverageRu: 'Медицина, эвакуация вертолётом, репатриация, задержка рейса (демо)', exclusionsRu: 'Дайвинг глубже 30 м; восхождение на Килиманджаро — только с доп. опцией (демо)', medicalLimitInfo: 'до 100 000 € (демо)',
+        verifiedAt: new Date('2026-09-20T00:00:00Z'), verifiedById: admin.id, published: true },
+      { name: 'Demo Strakhovanie D', nameRu: 'Демо Страхование Г', countriesCovered: ['TZ'], claimsContact: '+7 000 222-22-22 (demo)', repatriationConfirmed: false,
+        coverageRu: 'Медицинские расходы (демо)', exclusionsRu: 'Нет покрытия на Занзибаре (демо)', medicalLimitInfo: 'до 30 000 € (демо)', verifiedAt: new Date('2026-08-15T00:00:00Z'), verifiedById: admin.id, published: true },
     ],
   });
 

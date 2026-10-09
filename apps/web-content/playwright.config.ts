@@ -15,5 +15,7 @@ export default defineConfig({
   webServer: [
     { command: 'pnpm exec next start -p 3001', url: 'http://localhost:3001/robots.txt', reuseExistingServer: true, timeout: 120_000 },
     { command: 'node e2e/third-party-server.mjs', url: 'http://localhost:8088', reuseExistingServer: true },
+    // The API must run with TELEGRAM_API_BASE=http://localhost:8099 for the Telegram assertions.
+    { command: 'node e2e/fake-telegram.mjs', url: 'http://localhost:8099/__messages', reuseExistingServer: true },
   ],
 });

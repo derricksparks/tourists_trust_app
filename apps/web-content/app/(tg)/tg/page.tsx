@@ -20,6 +20,9 @@ export default function TelegramHome() {
     app?.expand();
     const start = app?.initDataUnsafe.start_param;
     if (start?.startsWith('op_')) router.replace(`/tg/operators/${encodeURIComponent(start.slice(3))}`);
+    else if (start?.startsWith('tr_')) router.replace(`/tg/translators/${encodeURIComponent(start.slice(3))}`);
+    else if (start === 'translators') router.replace('/tg/translators');
+    else if (start === 'translator') router.replace('/tg/translator-signup');
     fetch('/backend/public/countries')
       .then((r) => r.json())
       .then(setCountries)
@@ -39,6 +42,9 @@ export default function TelegramHome() {
       <header className="stack" style={{ gap: 6 }}>
         <h1>Проверенные туроператоры</h1>
         <p className="muted">Лицензия, регистрация и видео проверены. Выберите компанию, чтобы задать вопрос.</p>
+        <button className="btn" style={{ justifySelf: 'start' }} onClick={() => router.push('/tg/translators')}>
+          Нужен переводчик или гид
+        </button>
       </header>
       <div className="chips" role="group" aria-label="Страна">
         <button className="chip" aria-current={country === null} onClick={() => setCountry(null)}>

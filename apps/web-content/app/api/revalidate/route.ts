@@ -1,7 +1,7 @@
 import { revalidateTag } from 'next/cache';
 import { NextResponse } from 'next/server';
 
-const TAGS = new Set(['operators', 'guides']);
+const TAGS = new Set(['operators', 'guides', 'translators']);
 
 /** Called by the API after an approval, suspension, review or guide change. */
 export async function POST(req: Request) {

@@ -51,6 +51,7 @@ export class Bot {
     const chatId = msg.chat.id;
     switch (command.replace(/@\w+$/, '')) {
       case '/start':
+        if (payload === 'translator' || payload === 'translators') return this.send(chatId, this.translators());
         if (payload?.startsWith('op_')) {
           const op = await this.core.operator(payload.slice(3));
           if (op) return this.send(chatId, this.operatorCard(op));
@@ -58,6 +59,8 @@ export class Bot {
         return this.send(chatId, await this.home(msg.from?.first_name));
       case '/operators':
         return this.send(chatId, await this.countryPicker());
+      case '/translator':
+        return this.send(chatId, this.translators());
       case '/help':
         return this.send(chatId, this.help());
       default:
@@ -71,11 +74,13 @@ export class Bot {
   private async onCallback(q: CallbackQuery) {
     const data = q.data ?? '';
     const message = q.message;
+    if (data.startsWith('job:')) return this.onJobButton(q);
     let screen: Screen | null = null;
     let notice: string | undefined;
 
     if (data === 'home') screen = await this.home(q.from.first_name);
     else if (data === 'countries') screen = await this.countryPicker();
+    else if (data === 'translators') screen = this.translators();
     else if (data.startsWith('c:')) screen = await this.operatorList(data.slice(2));
     else if (data.startsWith('o:')) {
       const op = await this.core.operator(data.slice(2));
@@ -94,6 +99,42 @@ export class Bot {
       reply_markup: screen.reply_markup,
       link_preview_options: { is_disabled: true },
     });
+  }
+
+  /**
+   * job:accept|decline|complete:<id> from translators, job:rate:<id>:<1-5> from travellers.
+   * The API checks the presser is the right person and sends the follow-up messages itself.
+   */
+  private async onJobButton(q: CallbackQuery) {
+    const [, action, jobId, rating] = (q.data ?? '').split(':');
+    const reply =
+      action === 'rate'
+        ? await this.core.rateJob(jobId, q.from.id, Number(rating))
+        : action === 'accept' || action === 'decline' || action === 'complete'
+          ? await this.core.jobAction(jobId, q.from.id, action)
+          : { ok: false, message: 'Неизвестная кнопка' };
+    await this.telegram.call('answerCallbackQuery', { callback_query_id: q.id, text: reply.message, show_alert: !reply.ok });
+    // Once handled (or no longer valid), remove the buttons so they can't be pressed twice.
+    if (q.message) {
+      await this.telegram.call('editMessageReplyMarkup', { chat_id: q.message.chat.id, message_id: q.message.message_id, reply_markup: { inline_keyboard: [] } });
+    }
+  }
+
+  private translators(): Screen {
+    return {
+      text: [
+        '<b>Русскоговорящие гиды и переводчики</b>',
+        '',
+        'Устный перевод на месте, сопровождение, перевод документов. Все прошли нашу проверку: созвон на русском и пробное задание.',
+        'Выберите человека и опишите задачу — после его согласия бот пришлёт вам контакт.',
+      ].join('\n'),
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Найти переводчика', web_app: { url: `${this.site}/tg/translators` } }],
+          [{ text: 'Я переводчик — хочу в каталог', web_app: { url: `${this.site}/tg/translator-signup` } }],
+        ],
+      },
+    };
   }
 
   private async send(chatId: number, screen: Screen): Promise<void> {
@@ -121,7 +162,8 @@ export class Bot {
         inline_keyboard: [
           [{ text: 'Открыть каталог', web_app: { url: `${this.site}/tg` } }],
           ...this.countryRows(countries),
-          [{ text: 'Визы и документы', url: `${this.site}/visa` }],
+          [{ text: 'Гиды и переводчики', callback_data: 'translators' }],
+          [{ text: 'Визы и документы', url: `${this.site}/visa` }, { text: 'Страховка', url: `${this.site}/insurance` }],
         ],
       },
     };
@@ -187,6 +229,7 @@ export class Bot {
     return {
       text: [
         '/operators — выбрать страну и туроператора',
+        '/translator — гиды и переводчики',
         '/start — главное меню',
         '',
         'Задать вопрос: откройте карточку туроператора и нажмите «Задать вопрос». Ответ придёт сюда.',
@@ -207,6 +250,7 @@ export async function configureBot(telegram: BotApi, config: BotConfig) {
   await telegram.call('setMyCommands', {
     commands: [
       { command: 'operators', description: 'Проверенные туроператоры' },
+      { command: 'translator', description: 'Гиды и переводчики' },
       { command: 'start', description: 'Главное меню' },
       { command: 'help', description: 'Как это работает' },
     ],

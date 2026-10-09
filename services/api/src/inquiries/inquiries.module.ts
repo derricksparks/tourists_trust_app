@@ -146,5 +146,5 @@ export class AdminInquiriesController {
   }
 }
 
-@Module({ controllers: [AdminInquiriesController], providers: [InquiriesService, TelegramBotApi] })
+@Module({ controllers: [AdminInquiriesController], providers: [InquiriesService] })
 export class InquiriesModule {}

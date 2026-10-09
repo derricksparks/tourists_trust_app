@@ -34,6 +34,9 @@ const core: CoreApi = {
   ],
   operators: async (c) => (c === 'UG' ? [summary('pearl', 'Pearl', 4.5), summary('x'.repeat(70), 'Long Slug Ltd', null)] : []),
   operator: async (slug) => (slug === 'pearl' ? detail : null),
+  jobAction: async (jobId, telegramId, action) =>
+    telegramId === 5001 ? { ok: true, message: `${action} ${jobId}` } : { ok: false, message: 'Эта заявка не для вас' },
+  rateJob: async (_jobId, _telegramId, rating) => ({ ok: true, message: `rated ${rating}` }),
 };
 
 const SITE = 'https://site.example';
@@ -58,7 +61,9 @@ describe('bot', () => {
     expect(buttons(sent.reply_markup)).toEqual([
       { text: 'Открыть каталог', web_app: { url: `${SITE}/tg` } },
       { text: 'Уганда · 2', callback_data: 'c:UG' },
+      { text: 'Гиды и переводчики', callback_data: 'translators' },
       { text: 'Визы и документы', url: `${SITE}/visa` },
+      { text: 'Страховка', url: `${SITE}/insurance` },
     ]);
   });
 
@@ -102,6 +107,32 @@ describe('bot', () => {
   it('sets up commands and the Mini App menu button', async () => {
     await configureBot(tg, { siteUrl: `${SITE}/` });
     expect(tg.calls.map((c) => c.method)).toEqual(['setMyCommands', 'setChatMenuButton']);
+    expect((tg.calls[0].params.commands as { command: string }[]).map((c) => c.command)).toEqual(['operators', 'translator', 'start', 'help']);
     expect(tg.last('setChatMenuButton')).toEqual({ menu_button: { type: 'web_app', text: 'Каталог', web_app: { url: `${SITE}/tg` } } });
+  });
+
+  it('/translator opens the directory and the sign-up form in the Mini App', async () => {
+    await bot.handle(message('/translator'));
+    expect(buttons(tg.last('sendMessage').reply_markup)).toEqual([
+      { text: 'Найти переводчика', web_app: { url: `${SITE}/tg/translators` } },
+      { text: 'Я переводчик — хочу в каталог', web_app: { url: `${SITE}/tg/translator-signup` } },
+    ]);
+  });
+
+  it('forwards a translator accepting a job, then removes the buttons', async () => {
+    const id = '11111111-1111-1111-1111-111111111111';
+    await bot.handle({ update_id: 9, callback_query: { id: 'q9', from: { id: 5001 }, data: `job:accept:${id}`, message: { message_id: 60, chat: { id: 5001, type: 'private' } } } });
+    expect(tg.last('answerCallbackQuery')).toEqual({ callback_query_id: 'q9', text: `accept ${id}`, show_alert: false });
+    expect(tg.last('editMessageReplyMarkup')).toEqual({ chat_id: 5001, message_id: 60, reply_markup: { inline_keyboard: [] } });
+  });
+
+  it('shows the API refusal as an alert', async () => {
+    await bot.handle({ update_id: 10, callback_query: { id: 'q10', from: { id: 42 }, data: 'job:complete:x', message: { message_id: 61, chat: { id: 42, type: 'private' } } } });
+    expect(tg.last('answerCallbackQuery')).toEqual({ callback_query_id: 'q10', text: 'Эта заявка не для вас', show_alert: true });
+  });
+
+  it('forwards a rating', async () => {
+    await bot.handle({ update_id: 11, callback_query: { id: 'q11', from: { id: 9001 }, data: 'job:rate:abc:4', message: { message_id: 62, chat: { id: 9001, type: 'private' } } } });
+    expect(tg.last('answerCallbackQuery')).toMatchObject({ text: 'rated 4', show_alert: false });
   });
 });

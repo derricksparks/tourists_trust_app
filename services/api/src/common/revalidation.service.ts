@@ -1,7 +1,7 @@
 import { Global, Injectable, Logger, Module } from '@nestjs/common';
 
 /** Cache tags the public site uses; see apps/web-content/lib/api.ts. */
-export type ContentTag = 'operators' | 'guides';
+export type ContentTag = 'operators' | 'guides' | 'translators';
 
 /**
  * Tells the public site to refresh cached pages after content changes (decision B5.4: SSR/ISR
