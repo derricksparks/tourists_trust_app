@@ -7,6 +7,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../src/common/prisma.service';
+import { REFERENCE_COUNTRIES } from '../src/common/countries';
 import { ScoringService } from '../src/scoring/scoring.service';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'crypto';
@@ -14,6 +15,8 @@ import { createHash, randomBytes } from 'crypto';
 const prisma = new PrismaClient();
 const token = () => randomBytes(32).toString('base64url');
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
+/** Demo package-feed key (development only). */
+const DEMO_FEED_KEY = 'ttp_demo_0000000000000000000000000000000000000000';
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
 async function wipe() {
@@ -30,11 +33,9 @@ async function main() {
   // ── Reference data ──
   await prisma.country.createMany({
     data: [
-      { code: 'UG', nameEn: 'Uganda', nameRu: 'Уганда' },
-      { code: 'TZ', nameEn: 'Tanzania', nameRu: 'Танзания' },
-      { code: 'KE', nameEn: 'Kenya', nameRu: 'Кения' },
-      { code: 'RW', nameEn: 'Rwanda', nameRu: 'Руанда' },
-      { code: 'RU', nameEn: 'Russia', nameRu: 'Россия' },
+      ...REFERENCE_COUNTRIES,
+      // Added by staff but not switched on yet: shows the "more countries" flow (Phase 4).
+      { code: 'ZM', nameEn: 'Zambia', nameRu: 'Замбия', nameRuIn: 'в Замбии', active: false },
     ],
   });
 
@@ -54,7 +55,7 @@ async function main() {
   // ── Operators: a mix of statuses so the approval queue has work in it ──
   const approvedAt = new Date('2026-09-01T10:00:00Z');
   const op = (o: {
-    slug: string; name: string; countryCode: string; licensingAuthority: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'FLAGGED' | 'SUSPENDED';
+    slug: string; name: string; countryCode: string; licensingAuthority: string; status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'FLAGGED' | 'SUSPENDED';
     statusReason?: string; descriptionRu?: string; year?: number; video?: string; badgeToken?: string;
   }) =>
     prisma.operator.create({
@@ -78,6 +79,7 @@ async function main() {
         statusReason: o.statusReason,
         verificationVideoUrl: o.video,
         badgeToken: o.badgeToken ?? token(),
+        submittedAt: o.status === 'DRAFT' ? null : new Date(),
         ...(o.status === 'APPROVED' || o.status === 'SUSPENDED' ? { approvedAt, approvedById: moderator.id } : {}),
       },
     });
@@ -87,7 +89,7 @@ async function main() {
   const savanna = await op({ slug: 'savanna-line-tours-demo-ke', name: 'Savanna Line Tours (demo)', countryCode: 'KE', licensingAuthority: 'Tourism Regulatory Authority (Kenya)', status: 'APPROVED', year: 2015, descriptionRu: 'Масаи-Мара, Амбосели и пляжи Диани. (демо)' });
   await op({ slug: 'zanzi-spice-journeys-demo-tz', name: 'Zanzi Spice Journeys (demo)', countryCode: 'TZ', licensingAuthority: 'Tanzania Tourist Agency Licensing Authority (TALA)', status: 'PENDING', year: 2019 });
   await op({ slug: 'nile-source-adventures-demo-ug', name: 'Nile Source Adventures (demo)', countryCode: 'UG', licensingAuthority: 'Uganda Tourism Board', status: 'PENDING', year: 2021 });
-  await op({ slug: 'rift-valley-trails-demo-ke', name: 'Rift Valley Trails (demo)', countryCode: 'KE', licensingAuthority: 'Tourism Regulatory Authority (Kenya)', status: 'FLAGGED', statusReason: 'Licence number does not match the registry; asked operator for a copy.' });
+  const rift = await op({ slug: 'rift-valley-trails-demo-ke', name: 'Rift Valley Trails (demo)', countryCode: 'KE', licensingAuthority: 'Tourism Regulatory Authority (Kenya)', status: 'FLAGGED', statusReason: 'Licence number does not match the registry; asked operator for a copy.' });
   await op({ slug: 'quick-safari-deals-demo-ke', name: 'Quick Safari Deals (demo)', countryCode: 'KE', licensingAuthority: 'Tourism Regulatory Authority (Kenya)', status: 'REJECTED', statusReason: 'No valid tourism licence provided.' });
   await op({ slug: 'lake-mburo-camps-demo-ug', name: 'Lake Mburo Camps (demo)', countryCode: 'UG', licensingAuthority: 'Uganda Tourism Board', status: 'SUSPENDED', statusReason: 'Licence expired; awaiting renewal.', year: 2012, badgeToken: 'demo-badge-lake-mburo-camps' });
 
@@ -140,7 +142,7 @@ async function main() {
   });
 
   await prisma.operatorDocument.create({
-    data: { operatorId: pearl.id, type: 'TOURISM_LICENSE', storageKey: 'demo/pearl/licence.pdf', originalFilename: 'licence.pdf', reviewedById: moderator.id, reviewedAt: approvedAt, reviewNotes: 'Matches UTB registry (demo).' },
+    data: { operatorId: pearl.id, type: 'TOURISM_LICENSE', storageKey: 'demo/pearl/licence.pdf', originalFilename: 'licence.pdf', contentType: 'application/pdf', sizeBytes: 48213, reviewedById: moderator.id, reviewedAt: approvedAt, reviewNotes: 'Matches UTB registry (demo).' },
   });
   await prisma.media.create({
     data: { operatorId: pearl.id, kind: 'VIDEO', externalUrl: 'https://www.youtube.com/watch?v=demo1', captionRu: 'Наш офис и автомобили (демо)', status: 'APPROVED' },
@@ -153,6 +155,7 @@ async function main() {
       descriptionRu: 'Встреча в Энтеббе, переезд в Бвинди, трекинг с рейнджерами, возвращение. (демо)', descriptionEn: 'Fictional package for development.',
       countryCode: 'UG', durationDays: 4, price: 2450, currency: 'USD', priceBasis: 'PER_PERSON', capacity: 6,
       inclusions: ['gorilla permit', 'transport', 'accommodation', 'meals'], exclusions: ['international flights', 'visa', 'insurance'], status: 'PUBLISHED',
+      externalRef: 'PGT-BWINDI-4',
       dateRanges: { create: [{ startDate: day('2027-01-10'), endDate: day('2027-01-13') }, { startDate: day('2027-02-14'), endDate: day('2027-02-17'), capacity: 4 }] },
     },
   });
@@ -331,12 +334,26 @@ async function main() {
     },
   });
 
+  // ── Phase 4: self-onboarding and the package feed ──
+  // Signed up on the portal, application not sent yet (only the basics filled in).
+  const draft = await prisma.operator.create({
+    data: {
+      slug: 'bwindi-forest-walkers-demo-ug', name: 'Bwindi Forest Walkers (demo)', countryCode: 'UG', licensingAuthority: 'Uganda Tourism Board',
+      businessRegNumber: '', tourismBoardLicense: '', address: '', email: 'applicant@example.com', status: 'DRAFT', badgeToken: token(),
+    },
+  });
+  await prisma.account.create({ data: { email: 'applicant@example.com', passwordHash: portalHash, role: 'OPERATOR', operatorId: draft.id } });
+  // Flagged by staff: the operator sees the reason in the portal and can fix and resubmit.
+  await prisma.account.create({ data: { email: 'flagged@example.com', passwordHash: portalHash, role: 'OPERATOR', operatorId: rift.id } });
+  // Feed API key for Pearl. A fixed, fictional key so the docs' curl examples work against the dev database.
+  await prisma.apiKey.create({ data: { operatorId: pearl.id, name: 'Website sync (demo)', prefix: DEMO_FEED_KEY.slice(0, 12), keyHash: sha256(DEMO_FEED_KEY) } });
+
   // Operator scores (spec TV-6) are computed, never typed in.
   const scoring = new ScoringService(prisma as unknown as PrismaService);
   await scoring.recomputeAll();
 
   console.log(
-    `Seeded. Admin: ${adminEmail}, moderator@example.com, editor@example.com. Portal: operator@example.com, dmc@example.com. Password: SEED_ADMIN_PASSWORD.`,
+    `Seeded. Admin: ${adminEmail}, moderator@example.com, editor@example.com. Portal: operator@example.com, dmc@example.com, applicant@example.com. Password: SEED_ADMIN_PASSWORD. Feed API key: ${DEMO_FEED_KEY}`,
   );
 }
 

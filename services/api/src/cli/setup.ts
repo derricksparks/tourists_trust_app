@@ -7,14 +7,7 @@
 import { AdminRole, PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
-
-export const COUNTRIES = [
-  { code: 'UG', nameEn: 'Uganda', nameRu: 'Уганда' },
-  { code: 'TZ', nameEn: 'Tanzania', nameRu: 'Танзания' },
-  { code: 'KE', nameEn: 'Kenya', nameRu: 'Кения' },
-  { code: 'RW', nameEn: 'Rwanda', nameRu: 'Руанда' },
-  { code: 'RU', nameEn: 'Russia', nameRu: 'Россия' },
-];
+import { REFERENCE_COUNTRIES } from '../common/countries';
 
 async function main() {
   const [email, name, role = 'SUPER_ADMIN'] = process.argv.slice(2);
@@ -24,7 +17,7 @@ async function main() {
   }
   const prisma = new PrismaClient();
   try {
-    for (const c of COUNTRIES) await prisma.country.upsert({ where: { code: c.code }, create: c, update: {} });
+    for (const c of REFERENCE_COUNTRIES) await prisma.country.upsert({ where: { code: c.code }, create: c, update: {} });
 
     const password = randomBytes(12).toString('base64url');
     const passwordHash = await bcrypt.hash(password, 12);

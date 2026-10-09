@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Enum values shared by every app. They mirror the Prisma enums in
 // services/api/prisma/schema.prisma; a test in services/api keeps them in sync.
 
-export const OPERATOR_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'FLAGGED', 'SUSPENDED'] as const;
+export const OPERATOR_STATUSES = ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'FLAGGED', 'SUSPENDED'] as const;
 export type OperatorStatus = (typeof OPERATOR_STATUSES)[number];
 
 export const ADMIN_ROLES = ['SUPER_ADMIN', 'MODERATOR', 'CONTENT_EDITOR'] as const;
@@ -89,6 +89,12 @@ export const OPERATOR_TRANSITIONS: Record<OperatorDecision, { from: readonly Ope
   flag: { from: ['PENDING'], to: 'FLAGGED' },
   suspend: { from: ['APPROVED'], to: 'SUSPENDED' },
 };
+
+/**
+ * The operator's own step (Phase 4 self-onboarding): send a draft application, or answer staff's
+ * follow-up on a flagged one, into the review queue. Staff decisions above stay the only way live.
+ */
+export const OPERATOR_SUBMIT = { from: ['DRAFT', 'FLAGGED'] as readonly OperatorStatus[], to: 'PENDING' as OperatorStatus };
 
 /** A reason is required for every decision except approve; it is kept in the audit log. */
 export const operatorDecisionSchema = z

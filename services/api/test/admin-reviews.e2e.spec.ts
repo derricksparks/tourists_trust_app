@@ -79,7 +79,7 @@ describe('dashboard', () => {
     await prisma.operator.create({ data: { ...validOperator, countryCode: 'KE', slug: 'p', badgeToken: 'p' } });
     const stats = await auth(http().get('/admin/stats')).expect(200);
     expect(stats.body).toEqual({
-      operatorsByStatus: { PENDING: 1, APPROVED: 1, REJECTED: 0, FLAGGED: 0, SUSPENDED: 0 },
+      operatorsByStatus: { DRAFT: 0, PENDING: 1, APPROVED: 1, REJECTED: 0, FLAGGED: 0, SUSPENDED: 0 },
       reviewsPending: 1, inquiriesNew: 0, translatorsPending: 0, translationJobsOpen: 0, dmcsPending: 0, quotesUnanswered48h: 0, listingsLive: 0, dmcsOnboarded: 0, quoteRequests: 0, translatorJobsCompleted: 0,
     });
     const countries = await auth(http().get('/admin/countries')).expect(200);

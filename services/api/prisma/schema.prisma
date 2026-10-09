@@ -22,6 +22,7 @@ datasource db {
 // ─── Enums ──────────────────────────────────────────────────────────────────────
 
 enum OperatorStatus {
+  DRAFT // self-registered on the portal, application not submitted yet (Phase 4)
   PENDING
   APPROVED
   REJECTED
@@ -153,9 +154,15 @@ enum OperatorDocumentType {
 // ─── Reference data ───────────────────────────────────────────────────────────
 
 model Country {
-  code   String @id @db.Char(2)
-  nameEn String @map("name_en")
-  nameRu String @map("name_ru")
+  code               String   @id @db.Char(2)
+  nameEn             String   @map("name_en")
+  nameRu             String   @map("name_ru")
+  nameRuIn           String?  @map("name_ru_in") // locative for page titles: "в Уганде"
+  // Destinations we list operators in; off for reference-only rows such as Russia (DMC country)
+  active             Boolean  @default(false)
+  licensingAuthority String?  @map("licensing_authority") // default for new operators, e.g. "Uganda Tourism Board"
+  licenceRegisterUrl String?  @map("licence_register_url") // where staff check a licence number
+  createdAt          DateTime @default(now()) @map("created_at")
 
   operators         Operator[]
   dmcs              Dmc[]
@@ -212,6 +219,7 @@ model Account {
   dmc          Dmc?        @relation(fields: [dmcId], references: [id], onDelete: Cascade)
   translator   Translator? @relation(fields: [translatorId], references: [id], onDelete: Cascade)
   auditEntries AuditLog[]
+  apiKeys      ApiKey[]
 
   @@index([operatorId])
   @@index([dmcId])
@@ -269,6 +277,7 @@ model Operator {
   scoresComputedAt     DateTime?      @map("scores_computed_at")
   badgeToken           String         @unique @map("badge_token") // unguessable id used by the embed widget
   approvedAt           DateTime?      @map("approved_at")
+  submittedAt          DateTime?      @map("submitted_at") // last time the application went into the review queue
   approvedById         String?        @map("approved_by_id") @db.Uuid
   createdAt            DateTime       @default(now()) @map("created_at")
   updatedAt            DateTime       @updatedAt @map("updated_at")
@@ -284,6 +293,7 @@ model Operator {
   inquiries       Inquiry[]
   translationJobs TranslationJob[]
   famTrips        FamTripOperator[]
+  apiKeys         ApiKey[]
 
   @@index([status])
   @@index([countryCode, status])
@@ -297,6 +307,8 @@ model OperatorDocument {
   type             OperatorDocumentType
   storageKey       String               @map("storage_key") // object-storage key, private bucket
   originalFilename String               @map("original_filename")
+  contentType      String               @map("content_type") // pdf / jpeg / png only
+  sizeBytes        Int                  @map("size_bytes")
   reviewedById     String?              @map("reviewed_by_id") @db.Uuid
   reviewNotes      String?              @map("review_notes")
   reviewedAt       DateTime?            @map("reviewed_at")
@@ -471,6 +483,7 @@ model Package {
   inclusions    String[]
   exclusions    String[]
   status        PackageStatus @default(DRAFT)
+  externalRef   String?       @map("external_ref") // the operator's own id, for spreadsheet and API feed updates
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 
@@ -484,6 +497,7 @@ model Package {
   quoteRequests QuoteRequest[]
   listings      DmcPackageListing[]
 
+  @@unique([operatorId, externalRef])
   @@index([operatorId])
   @@index([countryCode, status])
   @@map("packages")
@@ -777,4 +791,23 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@map("audit_log")
+}
+
+/// Package feed API key (Phase 4, B2B-1 "API later"). Only a hash is stored; the key is shown once.
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  operatorId  String    @map("operator_id") @db.Uuid
+  name        String // what the operator calls it, e.g. "Website sync"
+  prefix      String // first characters, so the operator can tell keys apart
+  keyHash     String    @unique @map("key_hash") // sha256 of the full key
+  createdById String?   @map("created_by_id") @db.Uuid
+  lastUsedAt  DateTime? @map("last_used_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  operator  Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  createdBy Account? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([operatorId])
+  @@map("api_keys")
 }

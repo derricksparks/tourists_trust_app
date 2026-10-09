@@ -251,6 +251,12 @@ These keep the meaning of the spec's fields but change how they are stored:
 | `VisaGuide.requirements_ru` | + structured `checklist_items` | VI-2 checklist generator |
 | *(Phase 2, approved 2026-10-09)* `Translator` | + `telegram_user_id` (unique, nullable) | translators sign up and get job offers in the bot |
 | *(Phase 2, approved 2026-10-09)* `ReviewInvite` | + `inquiry_id` (unique, nullable) | invite the traveller who asked through the bot; one invite per inquiry |
+| *(Phase 4, proposed)* `Operator.status` | + `DRAFT` | an operator who signed up on the portal but hasn't sent the application; never in the review queue or public |
+| *(Phase 4, proposed)* `Operator` | + `submitted_at` | queue order and "waiting since"; set on submit and resubmit (existing rows: `created_at`) |
+| *(Phase 4, proposed)* `OperatorDocument` | + `content_type`, `size_bytes` (PDF/JPEG/PNG only, CHECK) | operators upload their licence and registration; staff download them |
+| *(Phase 4, proposed)* `Package` | + `external_ref`, unique per operator (CHECK on format) | the operator's own id, so spreadsheet re-imports and the feed API update instead of duplicating |
+| *(Phase 4, proposed)* new `api_keys` | operator, name, prefix, sha256 hash, last used, revoked | package feed API (B2B-1 "API later"); the key itself is shown once and never stored |
+| *(Phase 4, proposed)* `Country` | + `name_ru_in`, `active`, `licensing_authority`, `licence_register_url`, `created_at` | countries are added and switched on by staff instead of being hard-coded; Russian page titles need the locative ("в Уганде") |
 
 ---
 
