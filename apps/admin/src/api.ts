@@ -323,6 +323,9 @@ const qs = (params: Record<string, string | number | undefined>) => {
   return entries.length ? `?${new URLSearchParams(entries)}` : '';
 };
 
+/** A set-password link; `emailed` says whether the API emailed it to the partner. */
+type EmailedLink = { link: string; emailed: boolean; emailError?: string };
+
 export const api = {
   login: (email: string, password: string) => request<AdminLoginResult>('POST', '/admin/auth/login', { email, password }),
   me: () => request<AdminProfile>('GET', '/admin/auth/me'),
@@ -370,8 +373,8 @@ export const api = {
   dmcs: (status?: DmcStatus) => request<Dmc[]>('GET', `/admin/dmcs${qs({ status })}`),
   decideDmc: (id: string, body: DmcDecisionInput) => request<Dmc>('POST', `/admin/dmcs/${id}/decision`, body),
   operatorAccounts: (operatorId: string) => request<PortalAccount[]>('GET', `/admin/operators/${operatorId}/accounts`),
-  createOperatorAccount: (operatorId: string, email: string) => request<{ account: PortalAccount; link: string }>('POST', `/admin/operators/${operatorId}/accounts`, { email }),
-  passwordLink: (accountId: string) => request<{ link: string }>('POST', `/admin/accounts/${accountId}/password-link`),
+  createOperatorAccount: (operatorId: string, email: string) => request<{ account: PortalAccount } & EmailedLink>('POST', `/admin/operators/${operatorId}/accounts`, { email }),
+  passwordLink: (accountId: string) => request<EmailedLink>('POST', `/admin/accounts/${accountId}/password-link`),
   setAccountActive: (accountId: string, active: boolean) => request<PortalAccount>('POST', `/admin/accounts/${accountId}/active`, { active }),
   operatorScores: (operatorId: string) => request<OperatorScoreBreakdown>('GET', `/admin/operators/${operatorId}/scores`),
   quotes: (status?: QuoteStatus) => request<AdminQuote[]>('GET', `/admin/quotes${qs({ status })}`),

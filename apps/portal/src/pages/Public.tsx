@@ -48,10 +48,54 @@ export function LoginPage() {
         </div>
         {error && <p className="alert err" role="alert">{error}</p>}
         <button className="btn primary" type="submit" disabled={busy || !email || !password}>{busy ? '…' : 'Sign in / Войти'}</button>
-        <p className="small muted">
-          Forgot your password? Ask your contact at the platform for a new link. / Забыли пароль? Попросите новую ссылку у менеджера платформы.
-        </p>
+        <p className="small"><Link to="/forgot-password">Forgot your password? / Забыли пароль?</Link></p>
         <p className="small" lang="ru">Турфирма из России? <Link to="/signup">Подать заявку на доступ</Link></p>
+      </form>
+    </div>
+  );
+}
+
+export function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.forgotPassword(email.trim());
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof ApiError && err.status === 400 ? 'Check the email address. / Проверьте email.' : 'Could not reach the server. / Сервер недоступен.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="center">
+      <form className="panel" onSubmit={submit} noValidate>
+        <h1>New password · Новый пароль</h1>
+        {sent ? (
+          <p className="alert ok" role="status">
+            If {email.trim()} has a login, we have emailed it a link to set a new password. Check your spam folder too. / Если для этого адреса есть вход,
+            мы отправили на него ссылку для нового пароля. Проверьте и папку «Спам».
+          </p>
+        ) : (
+          <>
+            <p className="muted small">We’ll email you a link to set a new password. / Мы пришлём ссылку для нового пароля.</p>
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input id="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            {error && <p className="alert err" role="alert">{error}</p>}
+            <button className="btn primary" type="submit" disabled={busy || !email.trim()}>{busy ? '…' : 'Send link / Отправить'}</button>
+          </>
+        )}
+        <p className="small"><Link to="/login">← Sign in / Вход</Link></p>
       </form>
     </div>
   );

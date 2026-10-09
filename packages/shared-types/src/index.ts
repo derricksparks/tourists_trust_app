@@ -561,6 +561,8 @@ export const portalLoginSchema = adminLoginSchema;
 export const password = z.string().min(10, 'At least 10 characters').max(200);
 /** Set or reset a password from a one-time link (the token is in the link). */
 export const setPasswordSchema = z.object({ token: z.string().min(20), password });
+/** "Forgot password" on the portal sign-in page: emails a set-password link if the login exists. */
+export const forgotPasswordSchema = z.object({ email: z.string().trim().toLowerCase().email() });
 
 export interface PortalProfile {
   id: string;

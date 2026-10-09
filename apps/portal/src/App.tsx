@@ -3,7 +3,7 @@ import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-rou
 import { api } from './api';
 import { useAuth } from './auth';
 import { DmcFamTripsPage, DmcListingsPage, DmcPendingPage, DmcQuotesPage, InventoryPage } from './pages/Dmc';
-import { LoginPage, SetPasswordPage, SignupPage } from './pages/Public';
+import { ForgotPasswordPage, LoginPage, SetPasswordPage, SignupPage } from './pages/Public';
 import { OperatorFamTripsPage, OperatorOverviewPage, OperatorQuotesPage, PackageFormPage, PackagesPage } from './pages/Operator';
 
 export function App() {
@@ -12,6 +12,7 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/set-password" element={<SetPasswordPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route element={<RequireAuth />}>
         {account?.role === 'OPERATOR' && (

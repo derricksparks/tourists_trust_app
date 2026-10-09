@@ -10,12 +10,19 @@ import { countryName, formatDate } from '../format';
 
 const errText = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
-/** One-time link shown once, to send to the partner. */
-export function OneTimeLink({ link, what }: { link: string; what: string }) {
+/** One-time link shown once. Emailed to the partner when email is set up; staff can still pass it on. */
+export function OneTimeLink({ link, what, emailed, emailError }: { link: string; what: string; emailed?: boolean; emailError?: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="alert ok stack" style={{ gap: 8 }} role="status">
-      <span>{what} Send this link to them; it works once and expires in 7 days.</span>
+    <div className={`alert ${emailError ? 'err' : 'ok'} stack`} style={{ gap: 8 }} role="status">
+      <span>
+        {what}{' '}
+        {emailed
+          ? 'We emailed them this link. It works once and expires in 7 days; copy it if they can’t find the email.'
+          : emailError
+            ? `The email could not be sent (${emailError}). Send this link to them yourself; it works once and expires in 7 days.`
+            : 'Send this link to them; it works once and expires in 7 days.'}
+      </span>
       <input readOnly value={link} className="mono" aria-label="Set-password link" onFocus={(e) => e.currentTarget.select()} />
       <button type="button" className="btn" style={{ justifySelf: 'start' }} onClick={() => navigator.clipboard.writeText(link).then(() => setCopied(true), () => setCopied(false))}>
         {copied ? 'Copied' : 'Copy link'}
@@ -97,15 +104,15 @@ export function OperatorPortalPanel({ operatorId, approved }: { operatorId: stri
   const accounts = useQuery({ queryKey: ['operator-accounts', operatorId], queryFn: () => api.operatorAccounts(operatorId) });
   const scores = useQuery({ queryKey: ['operator-scores', operatorId], queryFn: () => api.operatorScores(operatorId) });
   const [email, setEmail] = useState('');
-  const [link, setLink] = useState<{ link: string; what: string } | null>(null);
+  const [link, setLink] = useState<{ link: string; what: string; emailed?: boolean; emailError?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['operator-accounts', operatorId] });
   const create = useMutation({
     mutationFn: () => api.createOperatorAccount(operatorId, email.trim()),
-    onSuccess: (r) => { setLink({ link: r.link, what: `Login created for ${r.account.email}.` }); setEmail(''); void refresh(); },
+    onSuccess: (r) => { setLink({ ...r, what: `Login created for ${r.account.email}.` }); setEmail(''); void refresh(); },
     onError: (e) => setError(errText(e, 'Couldn’t create the login.')),
   });
-  const reset = useMutation({ mutationFn: (id: string) => api.passwordLink(id), onSuccess: (r) => setLink({ link: r.link, what: 'New password link.' }) });
+  const reset = useMutation({ mutationFn: (id: string) => api.passwordLink(id), onSuccess: (r) => setLink({ ...r, what: 'New password link.' }) });
   const toggle = useMutation({ mutationFn: ({ id, active }: { id: string; active: boolean }) => api.setAccountActive(id, active), onSuccess: () => void refresh() });
   const s = scores.data;
 
@@ -147,7 +154,7 @@ export function OperatorPortalPanel({ operatorId, approved }: { operatorId: stri
         </form>
       )}
       {error && <p className="alert err" role="alert">{error}</p>}
-      {link && <OneTimeLink link={link.link} what={link.what} />}
+      {link && <OneTimeLink {...link} />}
     </section>
   );
 }

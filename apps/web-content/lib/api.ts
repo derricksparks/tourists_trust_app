@@ -47,7 +47,8 @@ export const publicApi = {
 };
 
 export const SITE_URL = (process.env.SITE_URL ?? 'http://localhost:3001').replace(/\/$/, '');
-export const TELEGRAM_BOT = process.env.NEXT_PUBLIC_TELEGRAM_BOT ?? 'TrustAfricaDemoBot';
+// Read on the server at request time (not inlined at build), so one built image serves any bot.
+export const TELEGRAM_BOT = process.env.TELEGRAM_BOT_USERNAME ?? 'TrustAfricaDemoBot';
 
 /** Deep link that opens the bot's Mini App straight on an operator (start_param = op_<slug>). */
 export const telegramLink = (slug?: string) =>

@@ -319,6 +319,28 @@ These keep the meaning of the spec's fields but change how they are stored:
   days (≤2 h → 100, ≥72 h or unanswered after 72 h → 0); completeness = points for Russian/English descriptions, video,
   website, year, contact, a published tour and upcoming dates. Recomputed after each relevant change; shown to the
   operator with tips and to staff on the operator page.
-- **Not built, needs a decision:** email notifications (new quote request, quote answered, DMC approved). Partners
-  currently see these when they open the portal; staff see late quotes on the dashboard. This needs an email
-  provider (and a sender domain).
+- Email notifications were left for a provider decision; they are built in the pilot setup below.
+
+### Pilot setup (email and hosting)
+
+No schema changes.
+
+- **Email:** plain SMTP (`nodemailer`), so the provider can be chosen and changed without code changes
+  (`SMTP_URL`, `MAIL_FROM`, `MAIL_FROM_NAME`, `MAIL_REPLY_TO`, `STAFF_EMAILS`). Plain-text emails: English to
+  operators and staff, Russian to DMCs. Who gets what: `docs/DEPLOY.md` §3. Sent after the action succeeds;
+  a failure is logged and does not undo the action (login links are also shown to staff). Without
+  `SMTP_URL`, emails are only written to the API log (development, tests).
+- **Forgotten passwords:** partners request a link on the portal (`POST /portal/auth/forgot-password`). The
+  answer is the same whether or not the address has a login, and each address gets at most one email per
+  5 minutes. Staff passwords are reset on the server with `cli/setup.js`; there is no admin user management
+  screen yet.
+- **Hosting:** one VPS running Docker Compose (`infra/production`): Caddy (automatic HTTPS), API, site,
+  bot, Postgres and a nightly `pg_dump`. The admin dashboard and portal are static builds served by Caddy,
+  with `/api` proxied, so the API has no public hostname of its own. Russian ISPs throttle several large
+  Western clouds and CDNs, so the guide says to avoid Cloudflare and to test the chosen provider from
+  Russia before committing. Still consistent with B5.2 (no Russian hosting for now).
+- **Safety in production:** the API refuses to start with short secrets or non-https links, and warns
+  when Telegram or email is off. The demo seed refuses to run (`NODE_ENV=production`). `cli/setup.js`
+  creates the first admin and the country list on an empty database.
+- The bot username for the site moved from build-time `NEXT_PUBLIC_TELEGRAM_BOT` to runtime
+  `TELEGRAM_BOT_USERNAME`, so one image serves any bot.

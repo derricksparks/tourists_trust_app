@@ -28,6 +28,11 @@ Pinned versions are deliberate; don't bump majors without asking.
   Set-password links are signed JWTs bound to a fingerprint of the current password hash (no DB column), so they
   stop working once used. Operator scores (TV-6) come from `ScoringService`; recompute after anything that changes
   response times or listing completeness.
+- Email: `NotificationsService` (`services/api/src/mail`) decides who is told what (EN operators/staff, RU DMCs) over
+  `MailService` (SMTP via `SMTP_URL`; without it messages are only logged and kept in `MailService.sent`, which tests read).
+  Notify after the action succeeds; never let an email failure undo it.
+- Production: `infra/production` (Docker Compose + Caddy), guide in `docs/DEPLOY.md`. Never run the seed there;
+  `node dist/cli/setup.js <email> "<name>" [role]` creates staff logins and the country list.
 - Telegram from the API: `TelegramBotApi` (send only). The bot process forwards button presses to `/bot/*`,
   authenticated with `X-Bot-Secret` = HMAC-SHA256(bot token, "ttp-bot-internal"); no extra secret to configure.
 - Public endpoints (`/public/*`) must only ever return approved operators and published content, and never

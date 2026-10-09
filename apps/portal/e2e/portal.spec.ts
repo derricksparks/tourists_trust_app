@@ -102,3 +102,11 @@ test('a pending DMC sees no catalogue', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Заявка на проверке' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Запросы цен' })).toHaveCount(0);
 });
+
+test('a partner who forgot the password asks for a new link from the sign-in page', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('link', { name: 'Forgot your password? / Забыли пароль?' }).click();
+  await page.getByLabel('Email').fill('dmc@example.com');
+  await page.getByRole('button', { name: 'Send link / Отправить' }).click();
+  await expect(page.getByRole('status')).toContainText('If dmc@example.com has a login, we have emailed it a link');
+});

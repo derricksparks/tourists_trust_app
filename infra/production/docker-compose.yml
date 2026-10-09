@@ -1,0 +1,127 @@
+# The whole platform on one server. See docs/DEPLOY.md.
+#   cp .env.example .env   # fill it in
+#   docker compose up -d --build
+name: ttp
+
+x-app: &app
+  build:
+    context: ../..
+    target: app
+    args:
+      SITE_URL: https://${SITE_DOMAIN}
+  image: ttp-app
+  restart: unless-stopped
+  logging: &logging
+    driver: local
+    options: { max-size: 20m, max-file: "5" }
+
+services:
+  db:
+    image: postgres:16.10
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ttp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ttp
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "ttp"]
+      interval: 5s
+      retries: 20
+    logging: *logging
+
+  api:
+    <<: *app
+    working_dir: /app/services/api
+    # Applies any new database migrations, then starts. The demo seed is never run here.
+    command: sh -c "node_modules/.bin/prisma migrate deploy && node dist/main.js"
+    environment:
+      DATABASE_URL: postgresql://ttp:${POSTGRES_PASSWORD}@db:5432/ttp
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:?set REVALIDATE_SECRET in .env}
+      WEB_REVALIDATE_URL: http://web:3001/api/revalidate
+      SITE_URL: https://${SITE_DOMAIN}
+      PORTAL_URL: https://${PORTAL_DOMAIN}
+      ADMIN_URL: https://${ADMIN_DOMAIN}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-}
+      MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
+      STAFF_EMAILS: ${STAFF_EMAILS:-}
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      start_period: 30s
+      retries: 6
+
+  web:
+    <<: *app
+    working_dir: /app/apps/web-content
+    command: node_modules/.bin/next start -p 3001
+    environment:
+      API_URL: http://api:3000
+      SITE_URL: https://${SITE_DOMAIN}
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+    depends_on:
+      api: { condition: service_healthy }
+
+  bot:
+    <<: *app
+    working_dir: /app/apps/telegram-bot
+    command: node dist/main.js
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      API_URL: http://api:3000
+      SITE_URL: https://${SITE_DOMAIN}
+    depends_on:
+      api: { condition: service_healthy }
+
+  proxy:
+    build:
+      context: ../..
+      target: proxy
+      args:
+        SITE_URL: https://${SITE_DOMAIN}
+    image: ttp-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in .env}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?set ADMIN_DOMAIN in .env}
+      PORTAL_DOMAIN: ${PORTAL_DOMAIN:?set PORTAL_DOMAIN in .env}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web, api]
+    logging: *logging
+
+  # Nightly database dump into ./backups, kept 14 days. Copy them off the server too (docs/DEPLOY.md).
+  backup:
+    image: postgres:16.10
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: ttp
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ttp
+    volumes:
+      - ./backups:/backups
+      - ./backup.sh:/backup.sh:ro
+    entrypoint: ["sh", "/backup.sh"]
+    depends_on:
+      db: { condition: service_healthy }
+    logging: *logging
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

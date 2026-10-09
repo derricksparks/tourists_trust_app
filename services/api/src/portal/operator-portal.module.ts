@@ -18,6 +18,7 @@ import { PackageInput, QuoteResponseInput, packageCreateSchema, packageStatusSch
 import { PrismaService } from '../common/prisma.service';
 import { RevalidationService } from '../common/revalidation.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { NotificationsService } from '../mail/notifications.service';
 import { ScoringService } from '../scoring/scoring.service';
 import { packageData, packageInclude, uniquePackageSlug } from './packages';
 import { CurrentAccount, PortalAccount, PortalAuthGuard, PortalRoles } from './portal-auth';
@@ -38,6 +39,7 @@ export class OperatorPortalController {
     private readonly prisma: PrismaService,
     private readonly scoring: ScoringService,
     private readonly revalidation: RevalidationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @Get('overview')
@@ -143,6 +145,7 @@ export class OperatorPortalController {
       data: { actorAccountId: a.id, action: `quote.${body.action}`, entityType: 'quote_request', entityId: id, reason: body.action === 'decline' ? body.reason : undefined },
     });
     await this.scoring.recompute(op.id);
+    this.notifications.quoteAnswered(id, body.action === 'decline' ? body.reason : undefined);
     return this.prisma.quoteRequest.findUniqueOrThrow({ where: { id } });
   }
 

@@ -15,7 +15,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { AdminUser, Prisma } from '@prisma/client';
+import { Account, AdminUser, Prisma } from '@prisma/client';
 import {
   DMC_STATUSES,
   DMC_TRANSITIONS,
@@ -33,6 +33,8 @@ import { z } from 'zod';
 import { AdminAuthGuard, AdminRoles, CurrentAdmin } from '../admin-auth/admin-auth.guard';
 import { PrismaService } from '../common/prisma.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../mail/notifications.service';
 import { ScoringService } from '../scoring/scoring.service';
 import { PortalAuthService, unusablePasswordHash } from './portal-auth';
 
@@ -47,7 +49,20 @@ export class AdminB2bController {
     private readonly prisma: PrismaService,
     private readonly portalAuth: PortalAuthService,
     private readonly scoring: ScoringService,
+    private readonly mail: MailService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /** Emails a set-password link when email is set up; the link is returned either way so staff can pass it on. */
+  private async sendLink(account: Account, kind: 'new' | 'reset') {
+    const link = await this.portalAuth.setPasswordLink(account);
+    try {
+      await this.notifications.passwordLink(account, link, kind);
+      return { link, emailed: this.mail.configured };
+    } catch (e) {
+      return { link, emailed: false, emailError: (e as Error).message };
+    }
+  }
 
   // ── DMCs ──────────────────────────────────────────────────────────────────
 
@@ -72,6 +87,7 @@ export class AdminB2bController {
       throw new ConflictException(`Cannot ${body.decision} a DMC whose status is ${current.status}`);
     }
     await this.prisma.auditLog.create({ data: { actorAdminId: admin.id, action: `dmc.${body.decision}`, entityType: 'dmc', entityId: id, reason: body.reason, metadata: { to } } });
+    this.notifications.dmcDecided(id, body.decision, body.reason);
     return this.prisma.dmc.findUniqueOrThrow({ where: { id }, include: { accounts: { select: accountSelect }, _count: { select: { quoteRequests: true, listings: true } } } });
   }
 
@@ -82,7 +98,7 @@ export class AdminB2bController {
     return this.prisma.account.findMany({ where: { operatorId: id }, select: accountSelect, orderBy: { createdAt: 'asc' } });
   }
 
-  /** Creates a login for an operator's staff and returns a one-time set-password link to send them. */
+  /** Creates a login for an operator's staff and emails them a one-time set-password link (also returned). */
   @Post('operators/:id/accounts')
   @AdminRoles('SUPER_ADMIN', 'MODERATOR')
   async createOperatorAccount(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(portalAccountCreateSchema)) body: { email: string }, @CurrentAdmin() admin: AdminUser) {
@@ -92,7 +108,7 @@ export class AdminB2bController {
     if (await this.prisma.account.findUnique({ where: { email: body.email } })) throw new ConflictException('That email already has a login');
     const account = await this.prisma.account.create({ data: { email: body.email, passwordHash: unusablePasswordHash(), role: 'OPERATOR', operatorId: id } });
     await this.prisma.auditLog.create({ data: { actorAdminId: admin.id, action: 'account.create', entityType: 'account', entityId: account.id, metadata: { operatorId: id } } });
-    return { account: { id: account.id, email: account.email, role: account.role, active: account.active }, link: await this.portalAuth.setPasswordLink(account) };
+    return { account: { id: account.id, email: account.email, role: account.role, active: account.active }, ...(await this.sendLink(account, 'new')) };
   }
 
   /** New one-time link (forgotten password). Older links stop working only once a password is set. */
@@ -103,7 +119,7 @@ export class AdminB2bController {
     const account = await this.prisma.account.findUnique({ where: { id } });
     if (!account || !account.active) throw new NotFoundException('Active login not found');
     await this.prisma.auditLog.create({ data: { actorAdminId: admin.id, action: 'account.password_link', entityType: 'account', entityId: id } });
-    return { link: await this.portalAuth.setPasswordLink(account) };
+    return this.sendLink(account, 'reset');
   }
 
   @Post('accounts/:id/active')
@@ -189,7 +205,7 @@ export class AdminB2bController {
   @HttpCode(200)
   @AdminRoles('SUPER_ADMIN', 'MODERATOR')
   async upsertParticipant(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(famTripParticipantSchema)) body: FamTripParticipantInput, @CurrentAdmin() admin: AdminUser) {
-    const trip = await this.prisma.famTrip.findUnique({ where: { id }, include: { dmcs: true } });
+    const trip = await this.prisma.famTrip.findUnique({ where: { id }, include: { dmcs: true, operators: true } });
     if (!trip) throw new NotFoundException('Fam trip not found');
     try {
       if (body.kind === 'dmc') {
@@ -211,6 +227,8 @@ export class AdminB2bController {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') throw new BadRequestException(`Unknown ${body.kind}`);
       throw e;
     }
+    if (body.kind === 'dmc' && body.confirmed && !trip.dmcs.find((d) => d.dmcId === body.id)?.confirmed) this.notifications.famTripDmcConfirmed(id, body.id);
+    if (body.kind === 'operator' && !trip.operators.some((o) => o.operatorId === body.id)) this.notifications.famTripOperatorAdded(id, body.id);
     await this.prisma.auditLog.create({ data: { actorAdminId: admin.id, action: 'fam_trip.participant', entityType: 'fam_trip', entityId: id, metadata: { kind: body.kind, id: body.id, confirmed: body.confirmed } } });
     return this.famTrip(id);
   }

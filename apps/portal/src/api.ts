@@ -91,6 +91,7 @@ const qs = (p: Record<string, string | number | undefined>) => {
 
 export const api = {
   login: (email: string, password: string) => request<PortalLoginResult>('POST', '/portal/auth/login', { email, password }),
+  forgotPassword: (email: string) => request<{ ok: true }>('POST', '/portal/auth/forgot-password', { email }),
   setPassword: (token: string, password: string) => request<PortalLoginResult>('POST', '/portal/auth/set-password', { token, password }),
   me: () => request<PortalProfile>('GET', '/portal/auth/me'),
   dmcSignup: (body: DmcSignupInput) => request<PortalLoginResult>('POST', '/portal/dmc-signup', body),

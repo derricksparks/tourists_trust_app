@@ -30,6 +30,7 @@ import { z } from 'zod';
 import { PrismaService } from '../common/prisma.service';
 import { RevalidationService } from '../common/revalidation.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { NotificationsService } from '../mail/notifications.service';
 import { CurrentAccount, PortalAccount, PortalAuthGuard, PortalAuthService, PortalRoles } from './portal-auth';
 
 /** The signed-in DMC; wholesale inventory and quotes need an approved company. */
@@ -83,6 +84,7 @@ export class DmcPortalController {
     private readonly prisma: PrismaService,
     private readonly auth: PortalAuthService,
     private readonly revalidation: RevalidationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Russian DMCs apply here; staff check them before inventory opens. */
@@ -90,10 +92,12 @@ export class DmcPortalController {
   async signup(@Body(new ZodValidationPipe(dmcSignupSchema)) body: DmcSignupInput) {
     const { email, password, ...company } = body;
     if (await this.prisma.account.findUnique({ where: { email } })) throw new ConflictException('Этот email уже зарегистрирован. Войдите или восстановите пароль.');
-    await this.prisma.$transaction(async (tx) => {
-      const dmc = await tx.dmc.create({ data: { ...company, email, countryCode: 'RU', status: 'PENDING' } });
-      await tx.account.create({ data: { email, passwordHash: await bcrypt.hash(password, 12), role: 'DMC', dmcId: dmc.id } });
+    const dmc = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.dmc.create({ data: { ...company, email, countryCode: 'RU', status: 'PENDING' } });
+      await tx.account.create({ data: { email, passwordHash: await bcrypt.hash(password, 12), role: 'DMC', dmcId: created.id } });
+      return created;
     });
+    this.notifications.dmcApplied(dmc);
     return this.auth.login({ email, password });
   }
 
@@ -143,6 +147,7 @@ export class DmcPortalController {
       },
     });
     await this.prisma.auditLog.create({ data: { actorAccountId: a.id, action: 'quote.request', entityType: 'quote_request', entityId: q.id } });
+    this.notifications.quoteRequested(q.id);
     return q;
   }
 
@@ -253,6 +258,7 @@ export class DmcPortalController {
       throw e;
     }
     await this.prisma.auditLog.create({ data: { actorAccountId: a.id, action: 'fam_trip.dmc_request', entityType: 'fam_trip', entityId: id } });
+    this.notifications.famTripRequested(id, dmc.id, body.representativeName);
     return { ok: true };
   }
 }

@@ -8,6 +8,7 @@ import {
   Get,
   HttpCode,
   Injectable,
+  Logger,
   Post,
   SetMetadata,
   UnauthorizedException,
@@ -17,19 +18,21 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Account, AccountRole, Dmc, Operator } from '@prisma/client';
-import { AdminLoginInput, PortalLoginResult, PortalProfile, portalLoginSchema, setPasswordSchema } from '@ttp/shared-types';
+import { AdminLoginInput, PortalLoginResult, PortalProfile, forgotPasswordSchema, portalLoginSchema, setPasswordSchema } from '@ttp/shared-types';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'crypto';
 import { Request } from 'express';
 import { z } from 'zod';
 import { PrismaService } from '../common/prisma.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { NotificationsService } from '../mail/notifications.service';
 
 export type PortalAccount = Account & { operator: Operator | null; dmc: Dmc | null };
 type PortalRequest = Request & { account?: PortalAccount };
 
 const ACCOUNT_TOKEN_TTL = '12h';
 const SET_PASSWORD_TTL = '7d';
+const RESET_INTERVAL_MS = 5 * 60 * 1000;
 const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing', 12);
 
 /** Ties a set-password link to the current password hash, so the link dies once it is used. */
@@ -54,7 +57,12 @@ export class PortalAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /** Last reset email per address, so the form can't be used to flood someone's inbox. */
+  private readonly lastReset = new Map<string, number>();
+  private readonly logger = new Logger(PortalAuthService.name);
 
   async login({ email, password }: AdminLoginInput): Promise<PortalLoginResult> {
     const account = await this.prisma.account.findUnique({ where: { email }, include: { operator: true, dmc: true } });
@@ -68,6 +76,21 @@ export class PortalAuthService {
   async setPasswordLink(account: Account): Promise<string> {
     const token = await this.jwt.signAsync({ sub: account.id, typ: 'pwset', fp: fingerprint(account.passwordHash) }, { expiresIn: SET_PASSWORD_TTL });
     return `${portalUrl()}/set-password?token=${token}`;
+  }
+
+  /**
+   * Emails a reset link to an active login. The answer is the same whether or not the address has
+   * a login, so the form doesn't reveal who our partners are.
+   */
+  async forgotPassword(email: string): Promise<void> {
+    const now = Date.now();
+    if (now - (this.lastReset.get(email) ?? 0) < RESET_INTERVAL_MS) return;
+    this.lastReset.set(email, now);
+    for (const [k, t] of this.lastReset) if (now - t > RESET_INTERVAL_MS) this.lastReset.delete(k);
+    const account = await this.prisma.account.findUnique({ where: { email } });
+    if (!account?.active) return;
+    // A failure is logged, not shown: an error only for real addresses would reveal them.
+    await this.notifications.passwordLink(account, await this.setPasswordLink(account), 'reset').catch((e: Error) => this.logger.error(`Reset email failed: ${e.message}`));
   }
 
   async setPassword(token: string, password: string): Promise<PortalLoginResult> {
@@ -137,6 +160,13 @@ export class PortalAuthController {
   @HttpCode(200)
   setPassword(@Body(new ZodValidationPipe(setPasswordSchema)) body: z.infer<typeof setPasswordSchema>) {
     return this.auth.setPassword(body.token, body.password);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(200)
+  async forgotPassword(@Body(new ZodValidationPipe(forgotPasswordSchema)) body: z.infer<typeof forgotPasswordSchema>) {
+    await this.auth.forgotPassword(body.email);
+    return { ok: true };
   }
 
   @Get('me')

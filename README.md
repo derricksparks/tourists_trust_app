@@ -5,6 +5,7 @@ connector between African tour operators and Russian DMCs. There is **no payment
 
 - Requirements, review and decisions: [`docs/BUILD_SPEC.md`](docs/BUILD_SPEC.md)
 - Data model: [`services/api/prisma/schema.prisma`](services/api/prisma/schema.prisma)
+- Hosting and email for the pilot: [`docs/DEPLOY.md`](docs/DEPLOY.md)
 
 ## Layout
 
@@ -15,7 +16,7 @@ apps/portal        partner portal: tour operators (English) and Russian DMCs (Ru
 apps/telegram-bot  Telegram bot (official Bot API, long polling)
 services/api       core NestJS API + PostgreSQL schema/migrations (Prisma)
 packages/shared-types  enums and request schemas shared by every app
-infra/             local Postgres (docker compose); deployment config later
+infra/             local Postgres (docker compose); infra/production: the pilot server setup
 ```
 
 ## Local setup
@@ -38,15 +39,16 @@ pnpm dev:portal                              # partner portal on http://localhos
 
 Portal demo sign-ins (same password): `operator@example.com` (Pearl Gorilla Treks), `dmc@example.com`
 (approved DMC), `dmc-pending@example.com` (DMC waiting for approval). Russian DMCs can also apply at `/signup`.
-New operator logins are created on the operator's page in the dashboard, which gives a one-time
-set-password link to send them.
+New operator logins are created on the operator's page in the dashboard. The partner is emailed a
+one-time set-password link, and staff also see it to pass on. Partners can reset a forgotten password
+from the portal sign-in page. In development (no `SMTP_URL`) emails are written to the API log instead.
 
 ### Telegram bot
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
 2. Put the same token in `services/api/.env` and `apps/telegram-bot/.env` as `TELEGRAM_BOT_TOKEN`
    (the API needs it to check Mini App sign-ins and to send staff replies).
-3. Set `NEXT_PUBLIC_TELEGRAM_BOT` in `apps/web-content/.env.local` to the bot's username.
+3. Set `TELEGRAM_BOT_USERNAME` in `apps/web-content/.env.local` to the bot's username.
 4. Telegram only opens Mini Apps over HTTPS, so `SITE_URL` must be a public `https://` address
    (for local testing, a tunnel such as `cloudflared` or `ngrok` in front of port 3001).
 5. `pnpm dev:bot`. In BotFather, also set the bot's Mini App URL to `SITE_URL/tg`.
@@ -97,5 +99,9 @@ indicative prices), answer DMC quote requests and confirm fam trips, and see the
 completeness scores; Russian DMCs apply, browse vetted inventory, request net prices, list tours under
 their own brand (copy-ready text, "where to buy" on the public tour page) and ask to join fam trips.
 Dashboard: DMC approval, portal logins, fam-trip planner, quote overview with 48-hour alerts.
+
+**Pilot setup done** — email over any SMTP provider (partner logins and password resets, quote
+requests and answers, DMC applications and decisions, fam trips), and a one-server production setup
+(Docker Compose, automatic HTTPS, nightly backups, first-admin command). See [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 Next: Phase 4 (operator self-onboarding, API-based package feed, more countries).

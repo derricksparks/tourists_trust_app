@@ -13,6 +13,7 @@ import { TranslatorsModule } from './translators/translators.module';
 import { PublicModule } from './public/public.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { HealthController } from './health/health.controller';
+import { NotificationsModule } from './mail/notifications.service';
 import { OperatorsModule } from './operators/operators.module';
 import { ReviewsModule } from './reviews/reviews.module';
 
@@ -20,6 +21,7 @@ import { ReviewsModule } from './reviews/reviews.module';
   imports: [
     PrismaModule,
     RevalidationModule,
+    NotificationsModule,
     AdminAuthModule,
     AdminOverviewModule,
     OperatorsModule,
