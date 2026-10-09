@@ -14,8 +14,9 @@
     "db:seed": "pnpm --filter @ttp/api prisma:seed",
     "dev:api": "pnpm --filter @ttp/api dev",
     "dev:admin": "pnpm --filter @ttp/admin dev",
-    "e2e": "pnpm --filter @ttp/admin e2e && pnpm --filter @ttp/web-content e2e",
+    "e2e": "pnpm --filter @ttp/admin e2e && pnpm --filter @ttp/portal e2e && pnpm --filter @ttp/web-content e2e",
     "dev:web": "pnpm --filter @ttp/web-content dev",
-    "dev:bot": "pnpm --filter @ttp/telegram-bot dev"
+    "dev:bot": "pnpm --filter @ttp/telegram-bot dev",
+    "dev:portal": "pnpm --filter @ttp/portal dev"
   }
 }

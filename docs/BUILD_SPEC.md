@@ -296,3 +296,29 @@ These keep the meaning of the spec's fields but change how they are stored:
   which also sends the link in the bot. Each operator page in the dashboard shows invites sent vs reviews written and
   how many invites went to travellers who asked through our bot rather than the operator's own list, with a nudge
   when every invite came from the operator.
+
+### Phase 3 (package feed, wholesale portal, fam trips)
+
+- **No schema changes.** Portal logins use `accounts`; set-password links are signed tokens tied to the current
+  password hash, so no token table is needed.
+- **One partner portal** (`apps/portal`, React + Vite) instead of a separate `apps/operator-portal` (Next.js) and a
+  DMC portal: same sign-in, the account's role picks the area. Operators see English, DMCs Russian. Nothing in it
+  needs search engines, so a single-page app is enough.
+- **Package feed (B2B-1):** form-based, as planned. Operators are already vetted, so they publish tours themselves
+  (a Russian description is required first); staff can still see everything. Spreadsheet import and photo uploads
+  are not built: there is no file storage yet.
+- **Quotes (B2B-2):** DMC asks (group size, dates, notes) → operator answers with a net price and terms, or declines
+  with a reason → DMC closes it, saying whether it turned into a booking (kept in the audit log). One open request
+  per DMC and tour. No payment, deposit or contract fields: the money side stays between the companies.
+- **White-label and mirror pages (B2B-2, B2B-4):** a DMC adds a tour to "my tours", optionally with its own title and
+  the URL of the tour on its site. It gets copy-ready Russian text without the operator's contacts. The public page
+  `/tours/<slug>` shows the tour with the operator's verification and lists DMCs that sell it ("where to buy").
+- **Fam trips (B2B-3):** staff plan trips (dates, places, Russian itinerary) and add host operators; approved DMCs ask
+  to join in the portal; staff confirm places within capacity; operators confirm hosting in their portal.
+- **Scores (TV-6):** response time = median hours to first answer over inquiries and quote requests in the last 90
+  days (≤2 h → 100, ≥72 h or unanswered after 72 h → 0); completeness = points for Russian/English descriptions, video,
+  website, year, contact, a published tour and upcoming dates. Recomputed after each relevant change; shown to the
+  operator with tips and to staff on the operator page.
+- **Not built, needs a decision:** email notifications (new quote request, quote answered, DMC approved). Partners
+  currently see these when they open the portal; staff see late quotes on the dashboard. This needs an email
+  provider (and a sender domain).

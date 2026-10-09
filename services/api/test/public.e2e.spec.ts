@@ -113,7 +113,7 @@ describe('public operators', () => {
     await operator('Beta', 'APPROVED', 'KE');
     await operator('Gamma', 'PENDING', 'KE');
     const res = await http().get('/public/countries').expect(200);
-    expect(Object.fromEntries(res.body.map((c: { code: string; operatorCount: number }) => [c.code, c.operatorCount]))).toEqual({ UG: 1, KE: 1, TZ: 0 });
+    expect(Object.fromEntries(res.body.map((c: { code: string; operatorCount: number }) => [c.code, c.operatorCount]))).toEqual({ UG: 1, KE: 1, TZ: 0 }); // Russia is the demand side and is not listed
   });
 });
 

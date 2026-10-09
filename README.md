@@ -11,6 +11,7 @@ connector between African tour operators and Russian DMCs. There is **no payment
 ```
 apps/admin         internal admin dashboard (React + Vite)
 apps/web-content   public Russian-language site, embeddable badge, Telegram Mini App (Next.js 14)
+apps/portal        partner portal: tour operators (English) and Russian DMCs (Russian) (React + Vite)
 apps/telegram-bot  Telegram bot (official Bot API, long polling)
 services/api       core NestJS API + PostgreSQL schema/migrations (Prisma)
 packages/shared-types  enums and request schemas shared by every app
@@ -32,7 +33,13 @@ pnpm dev:api                                 # API on http://localhost:3000/heal
 pnpm dev:admin                               # dashboard on http://localhost:5173
 cp apps/web-content/.env.example apps/web-content/.env.local
 pnpm dev:web                                 # public site on http://localhost:3001
+pnpm dev:portal                              # partner portal on http://localhost:5174
 ```
+
+Portal demo sign-ins (same password): `operator@example.com` (Pearl Gorilla Treks), `dmc@example.com`
+(approved DMC), `dmc-pending@example.com` (DMC waiting for approval). Russian DMCs can also apply at `/signup`.
+New operator logins are created on the operator's page in the dashboard, which gives a one-time
+set-password link to send them.
 
 ### Telegram bot
 
@@ -85,4 +92,10 @@ verification, public directory, offers accepted in the bot with a contact hand-o
 job), insurer comparison page, and invite-only reviews (links from the dashboard or straight from an
 answered inquiry, a one-time review form, invites-vs-reviews per operator).
 
-Next: Phase 3 (operator package feed, DMC wholesale portal, fam-trip tool).
+**Phase 3 done** — partner portal: operators manage their tour feed (draft → publish → archive, dates,
+indicative prices), answer DMC quote requests and confirm fam trips, and see their response-time and
+completeness scores; Russian DMCs apply, browse vetted inventory, request net prices, list tours under
+their own brand (copy-ready text, "where to buy" on the public tour page) and ask to join fam trips.
+Dashboard: DMC approval, portal logins, fam-trip planner, quote overview with 48-hour alerts.
+
+Next: Phase 4 (operator self-onboarding, API-based package feed, more countries).

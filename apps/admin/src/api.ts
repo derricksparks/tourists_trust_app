@@ -12,6 +12,13 @@ import type {
   InsurerCreateInput,
   InsurerUpdateInput,
   InviteStats,
+  DmcDecisionInput,
+  DmcStatus,
+  FamTripInput,
+  FamTripParticipantInput,
+  FamTripStatus,
+  OperatorScoreBreakdown,
+  QuoteStatus,
   ReviewInviteCreateInput,
   ReviewInviteState,
   TranslationJobStatus,
@@ -221,6 +228,32 @@ export interface ReviewInvite {
   issuedBy: { name: string };
 }
 
+export interface PortalAccount { id: string; email: string; role: string; active: boolean; lastLoginAt: string | null; createdAt: string }
+
+export interface Dmc {
+  id: string; name: string; legalName: string | null; websiteUrl: string | null; contactName: string | null; email: string | null;
+  phone: string | null; telegramUsername: string | null; status: DmcStatus; statusReason: string | null; createdAt: string;
+  accounts: PortalAccount[]; _count: { quoteRequests: number; listings: number };
+}
+
+export interface AdminQuote {
+  id: string; status: QuoteStatus; pax: number | null; travelStartDate: string | null; notes: string | null; quotedPrice: string | null;
+  quotedCurrency: string | null; quotedAt: string | null; closedAt: string | null; createdAt: string;
+  dmc: { id: string; name: string };
+  package: { id: string; title: string; operator: { id: string; name: string; email: string | null; phone: string | null } };
+}
+
+export interface FamTripRow {
+  id: string; title: string; startDate: string; endDate: string; status: FamTripStatus; capacity: number | null;
+  _count: { dmcs: number; operators: number }; dmcs: { confirmed: boolean }[];
+}
+export interface FamTripDetail {
+  id: string; title: string; startDate: string; endDate: string; status: FamTripStatus; capacity: number | null; notes: string | null;
+  itinerary: { day: number; titleRu: string; detailsRu?: string; operatorId?: string }[];
+  dmcs: { dmcId: string; confirmed: boolean; representativeName: string | null; dmc: { id: string; name: string; status: DmcStatus; contactName: string | null; email: string | null; phone: string | null } }[];
+  operators: { operatorId: string; confirmed: boolean; role: string | null; operator: { id: string; name: string; countryCode: string; email: string | null; phone: string | null } }[];
+}
+
 export interface AdminProfile {
   id: string;
   name: string;
@@ -333,6 +366,21 @@ export const api = {
   createInvite: (body: Partial<ReviewInviteCreateInput>) =>
     request<{ invite: ReviewInvite; link: string; sentInTelegram: boolean }>('POST', '/admin/review-invites', body),
   revokeInvite: (id: string) => request<{ ok: true }>('POST', `/admin/review-invites/${id}/revoke`),
+
+  dmcs: (status?: DmcStatus) => request<Dmc[]>('GET', `/admin/dmcs${qs({ status })}`),
+  decideDmc: (id: string, body: DmcDecisionInput) => request<Dmc>('POST', `/admin/dmcs/${id}/decision`, body),
+  operatorAccounts: (operatorId: string) => request<PortalAccount[]>('GET', `/admin/operators/${operatorId}/accounts`),
+  createOperatorAccount: (operatorId: string, email: string) => request<{ account: PortalAccount; link: string }>('POST', `/admin/operators/${operatorId}/accounts`, { email }),
+  passwordLink: (accountId: string) => request<{ link: string }>('POST', `/admin/accounts/${accountId}/password-link`),
+  setAccountActive: (accountId: string, active: boolean) => request<PortalAccount>('POST', `/admin/accounts/${accountId}/active`, { active }),
+  operatorScores: (operatorId: string) => request<OperatorScoreBreakdown>('GET', `/admin/operators/${operatorId}/scores`),
+  quotes: (status?: QuoteStatus) => request<AdminQuote[]>('GET', `/admin/quotes${qs({ status })}`),
+  famTrips: () => request<FamTripRow[]>('GET', '/admin/fam-trips'),
+  famTrip: (id: string) => request<FamTripDetail>('GET', `/admin/fam-trips/${id}`),
+  createFamTrip: (body: FamTripInput) => request<FamTripDetail>('POST', '/admin/fam-trips', body),
+  updateFamTrip: (id: string, body: FamTripInput) => request<FamTripDetail>('PATCH', `/admin/fam-trips/${id}`, body),
+  upsertParticipant: (id: string, body: FamTripParticipantInput) => request<FamTripDetail>('POST', `/admin/fam-trips/${id}/participants`, body),
+  removeParticipant: (id: string, kind: 'dmc' | 'operator', participantId: string) => request<FamTripDetail>('DELETE', `/admin/fam-trips/${id}/participants/${kind}/${participantId}`),
 
   reviews: (p: { status?: ReviewStatus; page?: number }) => request<Paginated<Review>>('GET', `/admin/reviews${qs(p)}`),
   decideReview: (id: string, body: ReviewDecisionInput) => request<Review>('POST', `/admin/reviews/${id}/decision`, body),

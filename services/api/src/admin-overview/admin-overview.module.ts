@@ -11,13 +11,15 @@ export class AdminOverviewController {
 
   @Get('stats')
   async stats(): Promise<AdminStats> {
-    const [byStatus, reviewsPending, inquiriesNew, translatorsPending, translationJobsOpen, listingsLive, dmcsOnboarded, quoteRequests, translatorJobsCompleted] =
+    const [byStatus, reviewsPending, inquiriesNew, translatorsPending, translationJobsOpen, dmcsPending, quotesUnanswered48h, listingsLive, dmcsOnboarded, quoteRequests, translatorJobsCompleted] =
       await this.prisma.$transaction([
         this.prisma.operator.groupBy({ by: ['status'], _count: { _all: true }, orderBy: { status: 'asc' } }),
         this.prisma.review.count({ where: { status: 'PENDING' } }),
         this.prisma.inquiry.count({ where: { status: 'NEW' } }),
         this.prisma.translator.count({ where: { verificationStatus: 'PENDING' } }),
         this.prisma.translationJob.count({ where: { status: 'REQUESTED' } }),
+        this.prisma.dmc.count({ where: { status: 'PENDING' } }),
+        this.prisma.quoteRequest.count({ where: { status: 'OPEN', createdAt: { lt: new Date(Date.now() - 48 * 3600 * 1000) } } }),
         this.prisma.package.count({ where: { status: 'PUBLISHED', operator: { status: 'APPROVED' } } }),
         this.prisma.dmc.count({ where: { status: 'APPROVED' } }),
         this.prisma.quoteRequest.count(),
@@ -33,7 +35,13 @@ export class AdminOverviewController {
       inquiriesNew,
       translatorsPending,
       translationJobsOpen,
-      listingsLive, dmcsOnboarded, quoteRequests, translatorJobsCompleted };
+      dmcsPending,
+      quotesUnanswered48h,
+      listingsLive,
+      dmcsOnboarded,
+      quoteRequests,
+      translatorJobsCompleted,
+    };
   }
 
   @Get('countries')

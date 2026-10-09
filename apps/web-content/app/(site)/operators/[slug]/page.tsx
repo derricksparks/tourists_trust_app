@@ -127,7 +127,9 @@ export default async function OperatorPage({ params }: Props) {
           <h2 id="tours">Туры</h2>
           {op.packages.map((p) => (
             <div key={p.slug} className="package" id={p.slug}>
-              <h3>{p.titleRu ?? p.title}</h3>
+              <h3>
+                <Link href={`/tours/${p.slug}`}>{p.titleRu ?? p.title}</Link>
+              </h3>
               <p className="row muted" style={{ gap: 14 }}>
                 <span>{count(p.durationDays, ['день', 'дня', 'дней'])}</span>
                 {p.capacity && <span>до {count(p.capacity, ['человека', 'человек', 'человек'])} в группе</span>}

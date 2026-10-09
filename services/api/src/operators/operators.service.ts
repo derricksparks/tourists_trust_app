@@ -11,6 +11,7 @@ import {
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../common/prisma.service';
 import { RevalidationService } from '../common/revalidation.service';
+import { ScoringService } from '../scoring/scoring.service';
 
 export function slugify(text: string): string {
   return text
@@ -32,6 +33,7 @@ export class OperatorsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly revalidation: RevalidationService,
+    private readonly scoring: ScoringService,
   ) {}
 
   async list(query: OperatorListQuery): Promise<Paginated<Operator>> {
@@ -100,6 +102,7 @@ export class OperatorsService {
       });
       return operator;
     });
+    await this.scoring.recompute(id);
     if (operator.status === 'APPROVED') this.revalidation.revalidate('operators');
     return operator;
   }

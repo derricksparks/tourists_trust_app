@@ -51,6 +51,14 @@ export function DashboardPage() {
                 <span className="value">{data.translatorsPending}</span>
                 <span>Translators to check</span>
               </Link>
+              <Link to="/dmcs" className={`tile ${data.dmcsPending ? 'attention' : ''}`}>
+                <span className="value">{data.dmcsPending}</span>
+                <span>DMCs to check</span>
+              </Link>
+              <Link to="/quotes" className={`tile ${data.quotesUnanswered48h ? 'attention' : ''}`}>
+                <span className="value">{data.quotesUnanswered48h}</span>
+                <span>Quote requests unanswered for 48 h+</span>
+              </Link>
               <Link to="/translation-jobs" className={`tile ${data.translationJobsOpen ? 'attention' : ''}`}>
                 <span className="value">{data.translationJobsOpen}</span>
                 <span>Translation requests without a translator</span>

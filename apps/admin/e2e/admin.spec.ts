@@ -194,3 +194,44 @@ test('a moderator invites a traveller who asked through the bot', async ({ page,
   const calls = await (await request.get('http://localhost:8099/__messages')).json();
   expect(calls.find((c: { chat_id?: string }) => c.chat_id === '100000001')?.reply_markup.inline_keyboard[0][0].text).toBe('Оставить отзыв');
 });
+
+test('a moderator approves a DMC', async ({ page }) => {
+  await signIn(page, 'moderator@example.com');
+  await page.getByRole('link', { name: /^DMCs/ }).click();
+  const card = page.locator('article', { hasText: 'Байкал Экспедиции (demo)' });
+  await card.getByRole('button', { name: 'Approve' }).click();
+  await expect(page.getByText('Байкал Экспедиции (demo)')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Approved' }).click();
+  await expect(page.locator('article', { hasText: 'Байкал Экспедиции (demo)' })).toBeVisible();
+});
+
+test('a moderator gives an operator a portal login and the link works once', async ({ page, browser }) => {
+  await signIn(page, 'moderator@example.com');
+  await page.goto('/operators?q=Savanna');
+  await page.getByRole('link', { name: 'Savanna Line Tours (demo)' }).click();
+  await page.getByLabel('Email for a new login').fill('owner@savanna-e2e.example');
+  await page.getByRole('button', { name: 'Create login' }).click();
+  const link = await page.getByLabel('Set-password link').inputValue();
+  expect(link).toMatch(/\/set-password\?token=/);
+
+  const portal = await browser.newPage();
+  await portal.goto(link.replace(/^https?:\/\/[^/]+/, 'http://localhost:5174'));
+  await portal.getByLabel('New password / Новый пароль').fill('savanna-owner-pass');
+  await portal.getByLabel('Repeat / Ещё раз').fill('savanna-owner-pass');
+  await portal.getByRole('button', { name: 'Save and sign in / Сохранить и войти' }).click();
+  await expect(portal.getByRole('heading', { level: 1 })).toHaveText('Savanna Line Tours (demo)');
+  await portal.close();
+});
+
+test('a moderator confirms a DMC on a fam trip and sees late quotes', async ({ page }) => {
+  await signIn(page, 'moderator@example.com');
+  await page.getByRole('link', { name: 'Fam trips' }).click();
+  await page.getByRole('link', { name: 'Uganda fam trip for Russian DMCs (demo)' }).click();
+  const dmcs = page.locator('section', { has: page.getByRole('heading', { name: /^DMCs/ }) });
+  await expect(dmcs).toContainText('Байкал Экспедиции (demo) · asking to join');
+  await dmcs.locator('li', { hasText: 'Байкал' }).getByRole('button', { name: 'Confirm place' }).click();
+  await expect(dmcs).toContainText('2 / 8 confirmed');
+
+  await page.getByRole('link', { name: /^Quotes/ }).click();
+  await expect(page.locator('tr', { hasText: 'Солнечный Путь (demo)' })).toContainText('Over 48 h');
+});

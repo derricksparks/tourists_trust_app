@@ -160,6 +160,8 @@ export interface AdminStats {
   inquiriesNew: number;
   translatorsPending: number;
   translationJobsOpen: number; // REQUESTED: waiting for staff to find a translator
+  dmcsPending: number;
+  quotesUnanswered48h: number; // OPEN quote requests older than 48 hours
   listingsLive: number; // published packages from approved operators
   dmcsOnboarded: number; // approved DMCs
   quoteRequests: number;
@@ -549,3 +551,176 @@ export const reviewSubmitSchema = z.object({
   consent: z.literal(true, { errorMap: () => ({ message: 'Нужно согласие на публикацию отзыва' }) }),
 });
 export type ReviewSubmitInput = z.infer<typeof reviewSubmitSchema>;
+
+// ─── Phase 3: partner portal accounts ────────────────────────────────────────
+
+export const ACCOUNT_ROLES = ['OPERATOR', 'DMC', 'TRANSLATOR'] as const;
+export type AccountRole = (typeof ACCOUNT_ROLES)[number];
+
+export const portalLoginSchema = adminLoginSchema;
+export const password = z.string().min(10, 'At least 10 characters').max(200);
+/** Set or reset a password from a one-time link (the token is in the link). */
+export const setPasswordSchema = z.object({ token: z.string().min(20), password });
+
+export interface PortalProfile {
+  id: string;
+  email: string;
+  role: AccountRole;
+  operator: { id: string; name: string; slug: string; status: OperatorStatus } | null;
+  dmc: { id: string; name: string; status: DmcStatus } | null;
+}
+export interface PortalLoginResult {
+  accessToken: string;
+  account: PortalProfile;
+}
+
+export const portalAccountCreateSchema = z.object({ email: z.string().trim().toLowerCase().email() });
+
+// ─── Phase 3: DMCs ───────────────────────────────────────────────────────────
+
+export const DMC_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'] as const;
+export type DmcStatus = (typeof DMC_STATUSES)[number];
+export const DMC_DECISIONS = ['approve', 'reject', 'suspend'] as const;
+export type DmcDecision = (typeof DMC_DECISIONS)[number];
+
+/** Russian travel companies apply in the portal; staff check them before they see wholesale inventory. */
+export const DMC_TRANSITIONS: Record<DmcDecision, { from: readonly DmcStatus[]; to: DmcStatus }> = {
+  approve: { from: ['PENDING', 'SUSPENDED'], to: 'APPROVED' },
+  reject: { from: ['PENDING'], to: 'REJECTED' },
+  suspend: { from: ['APPROVED'], to: 'SUSPENDED' },
+};
+export const dmcDecisionSchema = z
+  .object({ decision: z.enum(DMC_DECISIONS), reason: optionalText })
+  .refine((d) => d.decision === 'approve' || !!d.reason, { message: 'A reason is required to reject or suspend', path: ['reason'] });
+export type DmcDecisionInput = z.infer<typeof dmcDecisionSchema>;
+
+/** Self sign-up of a Russian DMC (Russian-language form). */
+export const dmcSignupSchema = z.object({
+  name: z.string().trim().min(2, 'Укажите название компании').max(120),
+  legalName: z.string().trim().max(200).optional(),
+  websiteUrl: z.string().trim().url('Укажите полный адрес сайта, начиная с https://').optional(),
+  contactName: z.string().trim().min(2, 'Укажите контактное лицо').max(120),
+  email: z.string().trim().toLowerCase().email('Проверьте email'),
+  phone: z.string().trim().max(40).optional(),
+  telegramUsername: z.string().trim().max(40).optional(),
+  password: z.string().min(10, 'Пароль — не короче 10 символов').max(200),
+});
+export type DmcSignupInput = z.infer<typeof dmcSignupSchema>;
+
+// ─── Phase 3: operator package feed (B2B-1) ──────────────────────────────────
+
+export const PACKAGE_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const;
+export type PackageStatus = (typeof PACKAGE_STATUSES)[number];
+export const CURRENCIES = ['USD', 'EUR', 'RUB'] as const;
+export const INCLUSION_OPTIONS = ['transport', 'accommodation', 'meals', 'guide', 'park fees', 'gorilla permit', '4x4 vehicle', 'lodges', 'airport transfer', 'flights'] as const;
+
+const dateRange = z
+  .object({ startDate: z.string().date(), endDate: z.string().date(), capacity: z.number().int().min(1).max(500).nullable().optional() })
+  .refine((d) => d.endDate >= d.startDate, { message: 'End date is before start date', path: ['endDate'] });
+
+/** A tour from an operator. Prices are indicative and for display/quotes only; nothing is charged. */
+export const packageInputSchema = z.object({
+  title: z.string().trim().min(3).max(150),
+  titleRu: z.string().trim().min(3).max(150).nullable().optional(),
+  descriptionEn: z.string().trim().min(1).max(5000).nullable().optional(),
+  descriptionRu: z.string().trim().min(1).max(5000).nullable().optional(),
+  countryCode: z.enum(['UG', 'TZ', 'KE', 'RW']),
+  durationDays: z.number().int().min(1).max(60),
+  price: z.number().min(0).max(1_000_000).nullable().optional(),
+  currency: z.enum(CURRENCIES).nullable().optional(),
+  priceBasis: z.enum(['PER_PERSON', 'PER_GROUP']).default('PER_PERSON'),
+  capacity: z.number().int().min(1).max(500).nullable().optional(),
+  inclusions: z.array(z.string().trim().min(1).max(60)).max(30).default([]),
+  exclusions: z.array(z.string().trim().min(1).max(60)).max(30).default([]),
+  dates: z.array(dateRange).max(52).default([]),
+});
+export const packageCreateSchema = packageInputSchema.refine((p) => p.price == null || !!p.currency, { message: 'Choose a currency for the price', path: ['currency'] });
+export type PackageInput = z.infer<typeof packageInputSchema>;
+export const packageStatusSchema = z.object({ status: z.enum(PACKAGE_STATUSES) });
+
+// ─── Phase 3: quotes (B2B-2) ─────────────────────────────────────────────────
+
+export const QUOTE_STATUSES = ['OPEN', 'QUOTED', 'CLOSED'] as const;
+export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
+
+/** A DMC asks an operator for wholesale terms on a package. */
+export const quoteRequestCreateSchema = z
+  .object({
+    packageId: z.string().uuid(),
+    pax: z.number().int().min(1, 'Минимум 1 человек').max(200),
+    travelStartDate: z.string().date(),
+    travelEndDate: z.string().date().optional(),
+    notes: z.string().trim().max(2000).optional(),
+  })
+  .refine((q) => !q.travelEndDate || q.travelEndDate >= q.travelStartDate, { message: 'Дата окончания раньше начала', path: ['travelEndDate'] });
+export type QuoteRequestCreateInput = z.infer<typeof quoteRequestCreateSchema>;
+
+/** The operator's answer: a price for the DMC to settle off-platform, or a reason they can't quote. */
+export const quoteResponseSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('quote'), quotedPrice: z.number().min(0).max(10_000_000), quotedCurrency: z.enum(CURRENCIES), quoteTerms: z.string().trim().min(5).max(3000) }),
+  z.object({ action: z.literal('decline'), reason: z.string().trim().min(5).max(1000) }),
+]);
+export type QuoteResponseInput = z.infer<typeof quoteResponseSchema>;
+
+/** The DMC closes a quote and says whether it turned into a booking (kept for analytics). */
+export const quoteCloseSchema = z.object({ outcome: z.enum(['booked', 'not_booked']), note: z.string().trim().max(1000).optional() });
+
+// ─── Phase 3: DMC listings / white-label (B2B-2, B2B-4) ──────────────────────
+
+export const dmcListingSchema = z.object({
+  packageId: z.string().uuid(),
+  whiteLabelTitle: z.string().trim().min(3).max(150).nullable().optional(),
+  dmcPageUrl: z.string().trim().url('Укажите полный адрес страницы, начиная с https://').nullable().optional(),
+  active: z.boolean().default(true),
+});
+export type DmcListingInput = z.infer<typeof dmcListingSchema>;
+
+/** Public mirror page of a package (B2B-4): links back to the operator and to DMCs selling it. */
+export interface PublicPackageDetail extends PublicPackage {
+  operator: PublicOperatorSummary & { websiteUrl: string | null };
+  sellers: { dmcName: string; title: string; url: string }[];
+}
+
+// ─── Phase 3: fam trips (B2B-3) ──────────────────────────────────────────────
+
+export const FAM_TRIP_STATUSES = ['PLANNED', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] as const;
+export type FamTripStatus = (typeof FAM_TRIP_STATUSES)[number];
+
+export const itineraryDaySchema = z.object({
+  day: z.number().int().min(1).max(60),
+  titleRu: z.string().trim().min(1).max(200),
+  detailsRu: z.string().trim().max(2000).optional(),
+  operatorId: z.string().uuid().optional(),
+});
+export type ItineraryDay = z.infer<typeof itineraryDaySchema>;
+
+export const famTripSchema = z
+  .object({
+    title: z.string().trim().min(3).max(200),
+    startDate: z.string().date(),
+    endDate: z.string().date(),
+    status: z.enum(FAM_TRIP_STATUSES).default('PLANNED'),
+    capacity: z.number().int().min(1).max(200).nullable().optional(),
+    itinerary: z.array(itineraryDaySchema).max(60).default([]),
+    notes: z.string().trim().max(5000).nullable().optional(),
+  })
+  .refine((t) => t.endDate >= t.startDate, { message: 'End date is before start date', path: ['endDate'] });
+export type FamTripInput = z.infer<typeof famTripSchema>;
+
+export const famTripParticipantSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('dmc'), id: z.string().uuid(), representativeName: z.string().trim().max(120).nullable().optional(), confirmed: z.boolean().default(false) }),
+  z.object({ kind: z.literal('operator'), id: z.string().uuid(), role: z.string().trim().max(60).nullable().optional(), confirmed: z.boolean().default(false) }),
+]);
+export type FamTripParticipantInput = z.infer<typeof famTripParticipantSchema>;
+
+export const famTripJoinSchema = z.object({ representativeName: z.string().trim().min(2, 'Кто поедет от компании?').max(120) });
+
+// ─── Phase 3: operator scores (TV-6) ─────────────────────────────────────────
+
+export interface OperatorScoreBreakdown {
+  responseTimeScore: number | null;
+  medianResponseHours: number | null;
+  responsesCounted: number;
+  completenessScore: number;
+  missing: { key: string; label: string; points: number }[];
+}

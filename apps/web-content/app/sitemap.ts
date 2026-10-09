@@ -16,6 +16,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     page('/operators'),
     ...countries.filter((c) => c.operatorCount > 0).map((c) => page(`/operators?country=${c.code}`)),
     ...operators.map((o) => page(`/operators/${o.slug}`)),
+    ...(await Promise.all(operators.map((o) => publicApi.operator(o.slug)))).flatMap((o) => o.packages.map((p) => page(`/tours/${p.slug}`))),
     page('/visa'),
     ...visas.map((v) => page(`/visa/${v.slug}`, v.lastUpdated)),
     page('/translators'),

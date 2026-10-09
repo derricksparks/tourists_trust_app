@@ -6,6 +6,8 @@
  * Wipes all application tables first, so never run against production.
  */
 import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../src/common/prisma.service';
+import { ScoringService } from '../src/scoring/scoring.service';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'crypto';
 
@@ -197,9 +199,9 @@ async function main() {
   const dmcA = await prisma.dmc.create({ data: { name: 'Северный Ветер Тур (demo)', websiteUrl: 'https://severny-veter.example.com', contactName: 'Демо Менеджер', email: 'b2b@severny-veter.example.com', status: 'APPROVED' } });
   const dmcB = await prisma.dmc.create({ data: { name: 'Байкал Экспедиции (demo)', websiteUrl: 'https://baikal-exp.example.com', status: 'PENDING' } });
   await prisma.dmcPackageListing.create({ data: { dmcId: dmcA.id, packageId: gorilla.id, whiteLabelTitle: 'Гориллы Уганды — эксклюзивно (демо)', dmcPageUrl: 'https://severny-veter.example.com/uganda-gorillas' } });
-  await prisma.quoteRequest.create({ data: { dmcId: dmcA.id, packageId: serengeti.id, pax: 6, travelStartDate: day('2027-07-01'), travelEndDate: day('2027-07-06'), notes: 'Нужна net-цена для группы (демо)' } });
+  await prisma.quoteRequest.create({ data: { dmcId: dmcA.id, packageId: serengeti.id, createdAt: new Date(Date.now() - 5 * 3600 * 1000), pax: 6, travelStartDate: day('2027-07-01'), travelEndDate: day('2027-07-06'), notes: 'Нужна net-цена для группы (демо)' } });
   await prisma.quoteRequest.create({
-    data: { dmcId: dmcA.id, packageId: gorilla.id, pax: 4, status: 'QUOTED', quotedPrice: 2200, quotedCurrency: 'USD', quoteTerms: 'Per person, net, valid 30 days (demo).', quotedAt: new Date('2026-09-20T00:00:00Z') },
+    data: { dmcId: dmcA.id, packageId: gorilla.id, pax: 4, status: 'QUOTED', quotedPrice: 2200, quotedCurrency: 'USD', quoteTerms: 'Per person, net, valid 30 days (demo).', createdAt: new Date('2026-09-19T00:00:00Z'), quotedAt: new Date('2026-09-20T00:00:00Z') },
   });
 
   await prisma.famTrip.create({
@@ -307,13 +309,35 @@ async function main() {
   await prisma.destinationGuide.create({ data: { slug: 'kenya-overview', countryCode: 'KE', kind: 'DESTINATION', titleRu: 'Кения: Масаи-Мара и океан', summaryRu: 'Главные места Кении (демо)', bodyRu: '**ДЕМО-ТЕКСТ.**\n\nМасаи-Мара, Амбосели, Самбуру и побережье.', status: 'PUBLISHED', publishedAt: new Date() } });
   await prisma.destinationGuide.create({ data: { slug: 'tanzania-overview', countryCode: 'TZ', kind: 'DESTINATION', titleRu: 'Танзания: что посмотреть', bodyRu: '**ДЕМО-ТЕКСТ.** Серенгети, Нгоронгоро, Занзибар.', status: 'PUBLISHED', publishedAt: new Date() } });
 
-  // ── Portal accounts (logins come in later phases; rows exist so the shape is exercised) ──
+  // ── Partner portal logins (password = SEED_ADMIN_PASSWORD) ──
   const portalHash = await bcrypt.hash(adminPassword, 12);
-  await prisma.account.create({ data: { email: 'portal@pearl-gorilla-treks-demo-ug.example.com', passwordHash: portalHash, role: 'OPERATOR', operatorId: pearl.id } });
-  await prisma.account.create({ data: { email: 'portal@severny-veter.example.com', passwordHash: portalHash, role: 'DMC', dmcId: dmcA.id } });
+  await prisma.account.create({ data: { email: 'operator@example.com', passwordHash: portalHash, role: 'OPERATOR', operatorId: pearl.id } });
+  await prisma.account.create({ data: { email: 'operator2@example.com', passwordHash: portalHash, role: 'OPERATOR', operatorId: kilima.id } });
+  await prisma.account.create({ data: { email: 'dmc@example.com', passwordHash: portalHash, role: 'DMC', dmcId: dmcA.id } });
+  await prisma.account.create({ data: { email: 'dmc-pending@example.com', passwordHash: portalHash, role: 'DMC', dmcId: dmcB.id } });
   await prisma.account.create({ data: { email: 'portal@amina.example.com', passwordHash: portalHash, role: 'TRANSLATOR', translatorId: tr.id } });
 
-  console.log(`Seeded. Admin login: ${adminEmail} / (SEED_ADMIN_PASSWORD). Also moderator@example.com and editor@example.com.`);
+  // ── Phase 3: more B2B activity ──
+  const dmcC = await prisma.dmc.create({ data: { name: 'Солнечный Путь (demo)', websiteUrl: 'https://solnechny-put.example.com', contactName: 'Демо Директор', email: 'info@solnechny-put.example.com', status: 'APPROVED' } });
+  // Unanswered for three days: shows up as slow on the dashboard and in Pearl's response score.
+  await prisma.quoteRequest.create({
+    data: { dmcId: dmcC.id, packageId: gorilla.id, pax: 8, travelStartDate: day('2027-02-14'), travelEndDate: day('2027-02-17'), notes: 'Корпоративная группа, нужны 4 двухместных номера (демо)', createdAt: new Date(Date.now() - 3 * 24 * 3600 * 1000) },
+  });
+  await prisma.famTrip.create({
+    data: {
+      title: 'Kenya & Tanzania safari fam trip (demo)', startDate: day('2027-06-05'), endDate: day('2027-06-12'), capacity: 6, status: 'PLANNED',
+      itinerary: [{ day: 1, titleRu: 'Прилёт в Найроби' }, { day: 2, titleRu: 'Масаи-Мара', operatorId: savanna.id }, { day: 5, titleRu: 'Серенгети', operatorId: kilima.id }],
+      operators: { create: [{ operatorId: savanna.id, role: 'host', confirmed: true }, { operatorId: kilima.id, role: 'host' }] },
+    },
+  });
+
+  // Operator scores (spec TV-6) are computed, never typed in.
+  const scoring = new ScoringService(prisma as unknown as PrismaService);
+  await scoring.recomputeAll();
+
+  console.log(
+    `Seeded. Admin: ${adminEmail}, moderator@example.com, editor@example.com. Portal: operator@example.com, dmc@example.com. Password: SEED_ADMIN_PASSWORD.`,
+  );
 }
 
 main()

@@ -36,6 +36,7 @@ jobs:
       - run: pnpm --filter @ttp/web-content build
       - run: pnpm --filter @ttp/admin build
       - run: pnpm --filter @ttp/telegram-bot build
+      - run: pnpm --filter @ttp/portal build
 
   e2e:
     runs-on: ubuntu-latest

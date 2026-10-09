@@ -26,6 +26,7 @@ import {
 import { AdminAuthGuard, AdminRoles, CurrentAdmin } from '../admin-auth/admin-auth.guard';
 import { PrismaService } from '../common/prisma.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { ScoringService } from '../scoring/scoring.service';
 import { TelegramApiError, TelegramBotApi } from '../telegram/bot-api';
 
 const FROM: Record<'RESPONDED' | 'CLOSED', InquiryStatus[]> = {
@@ -49,6 +50,7 @@ export class InquiriesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly bot: TelegramBotApi,
+    private readonly scoring: ScoringService,
   ) {}
 
   async list(q: InquiryListQuery) {
@@ -82,7 +84,7 @@ export class InquiriesService {
       }
       throw new BadGatewayException(e instanceof TelegramApiError ? `Telegram refused the message: ${e.description}` : 'Could not reach Telegram');
     }
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       await tx.inquiry.update({
         where: { id },
         data: { status: inquiry.status === 'NEW' ? 'RESPONDED' : inquiry.status, firstResponseAt: inquiry.firstResponseAt ?? new Date() },
@@ -92,10 +94,12 @@ export class InquiriesService {
       });
       return tx.inquiry.findUniqueOrThrow({ where: { id }, include });
     });
+    await this.scoring.recompute(inquiry.operatorId);
+    return updated;
   }
 
   async setStatus(id: string, { status }: InquiryStatusInput, admin: AdminUser) {
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.inquiry.updateMany({
         where: { id, status: { in: FROM[status] } },
         data: { status, ...(status === 'RESPONDED' && { firstResponseAt: new Date() }) },
@@ -110,6 +114,8 @@ export class InquiriesService {
       });
       return tx.inquiry.findUniqueOrThrow({ where: { id }, include });
     });
+    await this.scoring.recompute(updated.operator.id);
+    return updated;
   }
 }
 

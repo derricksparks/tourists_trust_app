@@ -103,3 +103,13 @@ test('Mini App: a traveller requests a translator, who gets the offer and accept
   const handoff = (await telegramCalls(page)).filter((c) => c.method === 'sendMessage' && c.chat_id === '777002');
   expect(handoff.at(-1)?.text).toContain('@demo_amina');
 });
+
+test('a tour page links back to the operator and to the DMC selling it', async ({ page }) => {
+  await page.goto('/operators/pearl-gorilla-treks-demo-ug');
+  await page.getByRole('link', { name: 'Трекинг к гориллам в Бвинди, 4 дня (демо)' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Трекинг к гориллам в Бвинди, 4 дня (демо)');
+  const buy = page.locator('section', { has: page.getByRole('heading', { name: 'Где купить' }) });
+  await expect(buy.getByRole('link', { name: 'Северный Ветер Тур (demo)' })).toHaveAttribute('href', 'https://severny-veter.example.com/uganda-gorillas');
+  await expect(page.getByRole('link', { name: 'Pearl Gorilla Treks (demo)', exact: true })).toHaveAttribute('href', '/operators/pearl-gorilla-treks-demo-ug');
+  expect((await page.goto('/tours/masai-mara-3d-demo'))?.status()).toBe(404); // a draft
+});

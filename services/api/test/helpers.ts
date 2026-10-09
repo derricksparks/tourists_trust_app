@@ -24,6 +24,7 @@ export async function resetDb(prisma: PrismaService) {
       { code: 'UG', nameEn: 'Uganda', nameRu: 'Уганда' },
       { code: 'TZ', nameEn: 'Tanzania', nameRu: 'Танзания' },
       { code: 'KE', nameEn: 'Kenya', nameRu: 'Кения' },
+      { code: 'RU', nameEn: 'Russia', nameRu: 'Россия' },
     ],
   });
 }

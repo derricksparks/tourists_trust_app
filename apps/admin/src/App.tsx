@@ -4,6 +4,7 @@ import { api } from './api';
 import { useAuth } from './auth';
 import { GuideFormPage, GuidesPage, VisaGuideFormPage, VisaGuidesPage } from './pages/ContentPages';
 import { DashboardPage } from './pages/DashboardPage';
+import { DmcsPage, FamTripPage, FamTripsPage, QuotesPage } from './pages/B2bPages';
 import { InquiriesPage } from './pages/InquiriesPage';
 import { InsurerFormPage, InsurersPage } from './pages/InsurerPages';
 import { TranslationJobsPage, TranslatorsPage } from './pages/TranslatorPages';
@@ -38,6 +39,11 @@ export function App() {
           <Route path="insurers" element={<InsurersPage />} />
           <Route path="insurers/new" element={<InsurerFormPage />} />
           <Route path="insurers/:id" element={<InsurerFormPage />} />
+          <Route path="dmcs" element={<DmcsPage />} />
+          <Route path="quotes" element={<QuotesPage />} />
+          <Route path="fam-trips" element={<FamTripsPage />} />
+          <Route path="fam-trips/new" element={<FamTripPage />} />
+          <Route path="fam-trips/:id" element={<FamTripPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>
@@ -62,6 +68,8 @@ function Shell() {
   const newInquiries = stats.data?.inquiriesNew;
   const pendingTranslators = stats.data?.translatorsPending;
   const openJobs = stats.data?.translationJobsOpen;
+  const pendingDmcs = stats.data?.dmcsPending;
+  const lateQuotes = stats.data?.quotesUnanswered48h;
 
   return (
     <div className="shell">
@@ -89,6 +97,13 @@ function Shell() {
           <NavLink to="/translation-jobs">
             Translation requests {!!openJobs && <span className="count" aria-label={`${openJobs} need a translator`}>{openJobs}</span>}
           </NavLink>
+          <NavLink to="/dmcs">
+            DMCs {!!pendingDmcs && <span className="count" aria-label={`${pendingDmcs} to check`}>{pendingDmcs}</span>}
+          </NavLink>
+          <NavLink to="/quotes">
+            Quotes {!!lateQuotes && <span className="count" aria-label={`${lateQuotes} waiting over 48 hours`}>{lateQuotes}</span>}
+          </NavLink>
+          <NavLink to="/fam-trips">Fam trips</NavLink>
           <NavLink to="/visa-guides">Visa guides</NavLink>
           <NavLink to="/guides">Travel guides</NavLink>
           <NavLink to="/insurers">Insurers</NavLink>
