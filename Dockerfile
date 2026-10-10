@@ -12,12 +12,13 @@ FROM base AS build
 COPY . .
 RUN pnpm install --frozen-lockfile
 # The dashboards are static files, so the public site's address is baked in when they are built.
+# The site's /backend proxy target is fixed at build time too: the API container (compose service "api").
 ARG SITE_URL
 RUN test -n "$SITE_URL" || (echo "Build argument SITE_URL is required" && exit 1)
 RUN pnpm --filter @ttp/shared-types build \
  && pnpm --filter @ttp/api build \
  && pnpm --filter @ttp/telegram-bot build \
- && pnpm --filter @ttp/web-content build \
+ && API_URL=http://api:3000 pnpm --filter @ttp/web-content build \
  && VITE_PUBLIC_SITE_URL=$SITE_URL pnpm --filter @ttp/admin build \
  && VITE_PUBLIC_SITE_URL=$SITE_URL pnpm --filter @ttp/portal build
 

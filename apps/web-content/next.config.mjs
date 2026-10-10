@@ -6,7 +6,8 @@ const nextConfig = {
   poweredByHeader: false,
   async rewrites() {
     // Browser-side calls (badge script, Mini App) go to /backend/* on this site and are proxied to the API,
-    // so the API never needs to be exposed on a second public hostname.
+    // so the API never needs to be exposed on a second public hostname. The target is fixed when the site is
+    // built (API_URL at build time; the Dockerfile sets the API container's address).
     return [{ source: '/backend/:path*', destination: `${API_URL}/:path*` }];
   },
   async headers() {
