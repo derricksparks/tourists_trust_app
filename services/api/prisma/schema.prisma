@@ -97,6 +97,17 @@ enum InquiryChannel {
   WEB
 }
 
+/// Whether a quote turned into a booking, as one side reports it (pilot round).
+enum BookingOutcome {
+  BOOKED
+  NOT_BOOKED
+}
+
+enum BookingSide {
+  DMC
+  OPERATOR
+}
+
 /// How an answer reached the traveller.
 enum ReplyDelivery {
   TELEGRAM
@@ -222,12 +233,13 @@ model Account {
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
-  operator       Operator?      @relation(fields: [operatorId], references: [id], onDelete: Cascade)
-  dmc            Dmc?           @relation(fields: [dmcId], references: [id], onDelete: Cascade)
-  translator     Translator?    @relation(fields: [translatorId], references: [id], onDelete: Cascade)
+  operator       Operator?            @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  dmc            Dmc?                 @relation(fields: [dmcId], references: [id], onDelete: Cascade)
+  translator     Translator?          @relation(fields: [translatorId], references: [id], onDelete: Cascade)
   auditEntries   AuditLog[]
   apiKeys        ApiKey[]
   inquiryReplies InquiryReply[]
+  bookingReports QuoteBookingReport[]
 
   @@index([operatorId])
   @@index([dmcId])
@@ -545,8 +557,9 @@ model QuoteRequest {
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
 
-  dmc     Dmc     @relation(fields: [dmcId], references: [id], onDelete: Cascade)
-  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  dmc            Dmc                  @relation(fields: [dmcId], references: [id], onDelete: Cascade)
+  package        Package              @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  bookingReports QuoteBookingReport[]
 
   @@index([dmcId, status])
   @@index([packageId])
@@ -838,4 +851,29 @@ model InquiryReply {
 
   @@index([inquiryId, createdAt])
   @@map("inquiry_replies")
+}
+
+/// One side's account of whether a quote became a booking (pilot round). The DMC and the operator
+/// each report once (and may correct it); staff see a flag when they disagree. Display and
+/// reporting only: no payment is taken or recorded here.
+model QuoteBookingReport {
+  id                  String         @id @default(uuid()) @db.Uuid
+  quoteRequestId      String         @map("quote_request_id") @db.Uuid
+  side                BookingSide
+  outcome             BookingOutcome
+  bookedOn            DateTime?      @map("booked_on") @db.Date // when the booking was made; required when BOOKED
+  netPrice            Decimal?       @map("net_price") @db.Decimal(12, 2) // agreed net price, as reported (display only)
+  currency            String?        @db.Char(3)
+  pax                 Int?
+  note                String?
+  reportedByAccountId String?        @map("reported_by_account_id") @db.Uuid
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  quoteRequest QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  reportedBy   Account?     @relation(fields: [reportedByAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([quoteRequestId, side])
+  @@index([bookedOn])
+  @@map("quote_booking_reports")
 }

@@ -166,6 +166,7 @@ export interface AdminStats {
   translationJobsOpen: number; // REQUESTED: waiting for staff to find a translator
   dmcsPending: number;
   quotesUnanswered48h: number; // OPEN quote requests older than 48 hours
+  bookingsDisputed: number; // quotes whose DMC and operator booking reports disagree
   listingsLive: number; // published packages from approved operators
   dmcsOnboarded: number; // approved DMCs
   quoteRequests: number;
@@ -822,4 +823,56 @@ export interface ImportResult {
   created: number;
   updated: number;
   failed: number;
+}
+
+// ─── Pilot round: booking outcome of a quote, reported by each side ──────────
+
+export const BOOKING_OUTCOMES = ['BOOKED', 'NOT_BOOKED'] as const;
+export type BookingOutcome = (typeof BOOKING_OUTCOMES)[number];
+export type BookingSide = 'DMC' | 'OPERATOR';
+
+/** One side's report. Money is display only: what was agreed, never a payment. */
+export const bookingReportSchema = z
+  .object({
+    outcome: z.enum(BOOKING_OUTCOMES),
+    bookedOn: z.string().date().optional(),
+    netPrice: z.number().min(0).max(10_000_000).optional(),
+    currency: z.enum(CURRENCIES).optional(),
+    pax: z.number().int().min(1).max(500).optional(),
+    note: z.string().trim().max(1000).optional(),
+  })
+  .refine((r) => r.outcome !== 'BOOKED' || !!r.bookedOn, { message: 'When was it booked?', path: ['bookedOn'] })
+  .refine((r) => (r.netPrice === undefined) === (r.currency === undefined), { message: 'Give the price and its currency together', path: ['currency'] });
+export type BookingReportInput = z.infer<typeof bookingReportSchema>;
+
+export interface BookingReportView {
+  side: BookingSide;
+  outcome: BookingOutcome;
+  bookedOn: string | null;
+  netPrice: string | number | { toString(): string } | null; // a decimal from the database, or a number
+  currency: string | null;
+  pax: number | null;
+  note?: string | null;
+  updatedAt: string | Date;
+}
+
+export type BookingState = 'none' | 'awaiting_other_side' | 'confirmed' | 'not_booked' | 'disputed';
+
+/**
+ * What the two reports add up to. A booking is confirmed when both sides say booked and the
+ * details both gave (travellers, net price) match; any contradiction is "disputed" for staff.
+ */
+export function bookingState(reports: Pick<BookingReportView, 'side' | 'outcome' | 'netPrice' | 'currency' | 'pax'>[]): { state: BookingState; differences: string[] } {
+  const dmc = reports.find((r) => r.side === 'DMC');
+  const op = reports.find((r) => r.side === 'OPERATOR');
+  if (!dmc && !op) return { state: 'none', differences: [] };
+  if (!dmc || !op) return { state: 'awaiting_other_side', differences: [] };
+  const differences: string[] = [];
+  if (dmc.outcome !== op.outcome) differences.push('booked or not');
+  if (dmc.outcome === 'BOOKED' && op.outcome === 'BOOKED') {
+    if (dmc.pax != null && op.pax != null && dmc.pax !== op.pax) differences.push('number of travellers');
+    if (dmc.netPrice != null && op.netPrice != null && (Number(String(dmc.netPrice)) !== Number(String(op.netPrice)) || dmc.currency !== op.currency)) differences.push('net price');
+  }
+  if (differences.length) return { state: 'disputed', differences };
+  return { state: dmc.outcome === 'BOOKED' ? 'confirmed' : 'not_booked', differences };
 }

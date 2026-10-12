@@ -103,6 +103,36 @@ export class NotificationsService {
     });
   }
 
+  /** One side reported a quote's outcome: ask the other side to confirm, or tell staff they disagree. */
+  bookingReported(quoteId: string, side: 'DMC' | 'OPERATOR', state: string): void {
+    this.run('bookingReported', async () => {
+      const q = await this.prisma.quoteRequest.findUniqueOrThrow({ where: { id: quoteId }, include: { dmc: true, bookingReports: true, package: { include: { operator: true } } } });
+      const mine = q.bookingReports.find((r) => r.side === side)!;
+      if (state === 'disputed') {
+        this.mail.notify({
+          to: this.mail.staffRecipients(),
+          subject: `Booking reports disagree: ${q.package.title} (${q.dmc.name} / ${q.package.operator.name})`,
+          text: `The DMC and the operator reported different outcomes or details for this quote.\n\nSee: ${adminUrl()}/quotes`,
+        });
+        return;
+      }
+      if (state !== 'awaiting_other_side' || mine.outcome !== 'BOOKED') return;
+      if (side === 'DMC') {
+        this.mail.notify({
+          to: await this.operatorLogins(q.package.operator.id),
+          subject: `Please confirm: ${q.dmc.name} reports a booking for ${q.package.title}`,
+          text: `Hello,\n\n${q.dmc.name} reports that the quote for "${q.package.title}" became a booking${mine.bookedOn ? ` on ${enDate(mine.bookedOn)}` : ''}${mine.pax ? `, ${mine.pax} travellers` : ''}.\n\nPlease confirm or correct it in the portal: ${portalUrl()}/quotes${SIGN_EN}`,
+        });
+      } else {
+        this.mail.notify({
+          to: await this.dmcLogins(q.dmcId),
+          subject: `Подтвердите бронирование: ${q.package.titleRu ?? q.package.title}`,
+          text: `Здравствуйте!\n\n${q.package.operator.name} сообщает, что по туру «${q.package.titleRu ?? q.package.title}» состоялось бронирование${mine.bookedOn ? ` (${ruDate(mine.bookedOn)})` : ''}${mine.pax ? `, ${mine.pax} чел.` : ''}.\n\nПодтвердите или исправьте в кабинете: ${portalUrl()}/quotes${SIGN_RU}`,
+        });
+      }
+    });
+  }
+
   dmcApplied(dmc: { id: string; name: string; contactName: string | null; email: string | null; websiteUrl: string | null }) {
     this.mail.notify({
       to: this.mail.staffRecipients(),

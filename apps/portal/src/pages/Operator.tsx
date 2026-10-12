@@ -3,6 +3,7 @@ import { CURRENCIES, INCLUSION_OPTIONS, PackageInput, PackageStatus, packageCrea
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, OperatorPackage, Quote } from '../api';
+import { BookingPanel } from '../components/BookingPanel';
 import { useCountries } from '../countries';
 import { COUNTRY_EN, dateEn, money, PUBLIC_SITE } from '../format';
 
@@ -372,6 +373,7 @@ function QuoteCard({ q }: { q: Quote }) {
           <button className="btn primary" type="submit" disabled={respond.isPending} style={{ justifySelf: 'start' }}>{mode === 'quote' ? 'Send quote' : 'Send answer'}</button>
         </form>
       )}
+      {(q.quotedPrice || q.bookingReports.length > 0) && <BookingPanel q={q} side="OPERATOR" lang="en" queryKey="operator-quotes" />}
     </article>
   );
 }

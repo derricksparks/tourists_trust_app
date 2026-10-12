@@ -59,6 +59,10 @@ export function DashboardPage() {
                 <span className="value">{data.quotesUnanswered48h}</span>
                 <span>Quote requests unanswered for 48 h+</span>
               </Link>
+              <Link to="/bookings" className={`tile ${data.bookingsDisputed ? 'attention' : ''}`}>
+                <span className="value">{data.bookingsDisputed}</span>
+                <span>Bookings where the DMC and operator disagree</span>
+              </Link>
               <Link to="/translation-jobs" className={`tile ${data.translationJobsOpen ? 'attention' : ''}`}>
                 <span className="value">{data.translationJobsOpen}</span>
                 <span>Translation requests without a translator</span>

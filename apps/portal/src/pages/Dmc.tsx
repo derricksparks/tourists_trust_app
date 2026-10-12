@@ -3,6 +3,7 @@ import { FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError, DmcFamTrip, InventoryItem, Listing } from '../api';
 import { useAuth } from '../auth';
+import { BookingPanel } from '../components/BookingPanel';
 import { useCountries } from '../countries';
 import { COUNTRY_RU, dateRu, money, PUBLIC_SITE } from '../format';
 
@@ -146,7 +147,7 @@ export function DmcQuotesPage() {
       <header className="stack" style={{ gap: 6 }}>
         <span className="eyebrow">Запросы цен</span>
         <h1>Ответы туроператоров</h1>
-        <p className="muted">Договор и оплата — напрямую с туроператором. Когда вопрос решён, закройте запрос и отметьте, состоялась ли продажа: это помогает нам оценивать туроператоров.</p>
+        <p className="muted">Договор и оплата — напрямую с туроператором. Когда вопрос решён, отметьте, состоялось ли бронирование: туроператор подтверждает со своей стороны.</p>
       </header>
       {error && <p className="alert err">{errorText(error, 'Не удалось загрузить запросы.')}</p>}
       {data?.length === 0 && <p className="panel muted">Запросов пока нет. Запросите цену в каталоге.</p>}
@@ -167,12 +168,12 @@ export function DmcQuotesPage() {
               </p>
             )}
             {q.status === 'CLOSED' && !q.quotedPrice && <p className="muted small">Туроператор не смог предложить цену на эти даты.</p>}
-            {q.status !== 'CLOSED' && (
+            {q.status === 'OPEN' && (
               <div className="row">
-                {q.status === 'QUOTED' && <button className="btn primary small" disabled={close.isPending} onClick={() => close.mutate({ id: q.id, outcome: 'booked' })}>Закрыть: продали</button>}
-                <button className="btn small" disabled={close.isPending} onClick={() => close.mutate({ id: q.id, outcome: 'not_booked' })}>Закрыть: не продали</button>
+                <button className="btn small" disabled={close.isPending} onClick={() => close.mutate({ id: q.id, outcome: 'not_booked' })}>Отменить запрос</button>
               </div>
             )}
+            {q.status !== 'OPEN' && <BookingPanel q={q} side="DMC" lang="ru" queryKey="dmc-quotes" />}
           </article>
         );
       })}

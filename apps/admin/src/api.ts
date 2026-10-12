@@ -1,4 +1,5 @@
 import type {
+  BookingState,
   AdminCountry,
   CountryCreateInput,
   CountryUpdateInput,
@@ -252,7 +253,18 @@ export interface AdminQuote {
   quotedCurrency: string | null; quotedAt: string | null; closedAt: string | null; createdAt: string;
   dmc: { id: string; name: string };
   package: { id: string; title: string; operator: { id: string; name: string; email: string | null; phone: string | null } };
+  bookingReports: { side: 'DMC' | 'OPERATOR'; outcome: 'BOOKED' | 'NOT_BOOKED'; bookedOn: string | null; pax: number | null; netPrice: string | null; currency: string | null }[];
+  booking: { state: BookingState; differences: string[] };
 }
+
+/** Monthly bookings report (pilot round), for invoicing introduction fees by hand. */
+export interface BookingRow {
+  quoteId: string; month: string; bookedOn: string | null; tour: string; pax: number | null; netPrice: string | null; currency: string | null;
+  state: BookingState; differences: string[];
+  operator: { id: string; name: string }; dmc: { id: string; name: string };
+}
+export interface BookingTotal { month: string; id: string; name: string; bookings: number; pax: number }
+export interface BookingsReport { from: string; to: string; confirmed: BookingRow[]; needsAttention: BookingRow[]; byOperator: BookingTotal[]; byDmc: BookingTotal[] }
 
 export interface FamTripRow {
   id: string; title: string; startDate: string; endDate: string; status: FamTripStatus; capacity: number | null;
@@ -397,6 +409,17 @@ export const api = {
   passwordLink: (accountId: string) => request<EmailedLink>('POST', `/admin/accounts/${accountId}/password-link`),
   setAccountActive: (accountId: string, active: boolean) => request<PortalAccount>('POST', `/admin/accounts/${accountId}/active`, { active }),
   operatorScores: (operatorId: string) => request<OperatorScoreBreakdown>('GET', `/admin/operators/${operatorId}/scores`),
+  bookings: (from: string, to: string) => request<BookingsReport>('GET', `/admin/bookings${qs({ from, to })}`),
+  /** Downloads a CSV export (needs the admin token, so it is fetched, then saved). */
+  downloadBookingsCsv: async (from: string, to: string, view: 'bookings' | 'operators' | 'dmcs') => {
+    const res = await fetch(`/api/admin/bookings/export.csv${qs({ from, to, view })}`, { headers: { Authorization: `Bearer ${tokenStore.get()}` } });
+    if (!res.ok) throw new ApiError(res.status, 'Could not export');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await res.blob());
+    a.download = `bookings-${view}-${from}-to-${to}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  },
   quotes: (status?: QuoteStatus) => request<AdminQuote[]>('GET', `/admin/quotes${qs({ status })}`),
   famTrips: () => request<FamTripRow[]>('GET', '/admin/fam-trips'),
   famTrip: (id: string) => request<FamTripDetail>('GET', `/admin/fam-trips/${id}`),

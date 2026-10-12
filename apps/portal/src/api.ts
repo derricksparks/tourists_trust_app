@@ -1,4 +1,7 @@
 import type {
+  BookingReportInput,
+  BookingSide,
+  BookingState,
   DocumentType,
   ImportResult,
   OperatorApplicationInput,
@@ -37,6 +40,9 @@ export interface Quote {
   quotedPrice: string | null; quotedCurrency: string | null; quoteTerms: string | null; quotedAt: string | null; closedAt: string | null; createdAt: string;
   package: { id: string; title: string; titleRu?: string | null; slug?: string; durationDays: number; operator?: { name: string; slug: string } };
   dmc?: { name: string; websiteUrl: string | null; contactName: string | null; email: string | null; phone: string | null };
+  /** Each side's booking report (pilot round) and what they add up to. */
+  bookingReports: { side: BookingSide; outcome: 'BOOKED' | 'NOT_BOOKED'; bookedOn: string | null; netPrice: string | null; currency: string | null; pax: number | null; updatedAt: string }[];
+  booking: { state: BookingState; differences: string[] };
 }
 export interface InventoryItem {
   id: string; slug: string; title: string; titleRu: string | null; descriptionRu: string | null; countryCode: string; durationDays: number;
@@ -171,6 +177,8 @@ export const api = {
   inventory: (p: { country?: string; q?: string; maxDays?: number; month?: string }) => request<InventoryItem[]>('GET', `/portal/dmc/inventory${qs(p)}`),
   requestQuote: (body: QuoteRequestCreateInput) => request<Quote>('POST', '/portal/dmc/quotes', body),
   dmcQuotes: () => request<Quote[]>('GET', '/portal/dmc/quotes'),
+  dmcBooking: (id: string, body: BookingReportInput) => request<Quote>('PUT', `/portal/dmc/quotes/${id}/booking`, body),
+  operatorBooking: (id: string, body: BookingReportInput) => request<Quote>('PUT', `/portal/operator/quotes/${id}/booking`, body),
   closeQuote: (id: string, outcome: 'booked' | 'not_booked') => request<{ ok: true }>('POST', `/portal/dmc/quotes/${id}/close`, { outcome }),
   listings: () => request<Listing[]>('GET', '/portal/dmc/listings'),
   saveListing: (body: DmcListingInput) => request<unknown>('POST', '/portal/dmc/listings', body),

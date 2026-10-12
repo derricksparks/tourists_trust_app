@@ -19,6 +19,7 @@ import { activeCountry } from '../common/countries';
 import { PrismaService } from '../common/prisma.service';
 import { RevalidationService } from '../common/revalidation.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { withBooking } from '../bookings/bookings.module';
 import { NotificationsService } from '../mail/notifications.service';
 import { ScoringService } from '../scoring/scoring.service';
 import { packageData, packageInclude, uniquePackageSlug } from './packages';
@@ -135,12 +136,13 @@ export class OperatorPortalController {
   // ── Quote requests from DMCs (B2B-2) ──────────────────────────────────────
 
   @Get('quotes')
-  quotes(@CurrentAccount() a: PortalAccount) {
-    return this.prisma.quoteRequest.findMany({
+  async quotes(@CurrentAccount() a: PortalAccount) {
+    const rows = await this.prisma.quoteRequest.findMany({
       where: { package: { operatorId: operatorOf(a).id } },
-      include: { package: { select: { id: true, title: true, durationDays: true } }, dmc: { select: { name: true, websiteUrl: true, contactName: true, email: true, phone: true } } },
+      include: { bookingReports: true, package: { select: { id: true, title: true, durationDays: true } }, dmc: { select: { name: true, websiteUrl: true, contactName: true, email: true, phone: true } } },
       orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
     });
+    return rows.map(withBooking);
   }
 
   @Post('quotes/:id/respond')

@@ -12,6 +12,7 @@ import { ScoringModule } from './scoring/scoring.service';
 import { TranslatorsModule } from './translators/translators.module';
 import { PublicModule } from './public/public.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { BookingsModule } from './bookings/bookings.module';
 import { FeedModule } from './feed/feed.module';
 import { HealthController } from './health/health.controller';
 import { NotificationsModule } from './mail/notifications.service';
@@ -39,6 +40,7 @@ import { ReviewsModule } from './reviews/reviews.module';
     ScoringModule,
     PortalModule,
     FeedModule,
+    BookingsModule,
   ],
   controllers: [HealthController],
 })

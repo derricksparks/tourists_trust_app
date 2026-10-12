@@ -153,3 +153,92 @@ describe('operator inbox for traveller questions', () => {
     expect((await scoring.breakdown(op.id)).medianResponseHours).toBe(36.5);
   });
 });
+
+describe('booked status on quotes', () => {
+  async function quoteBetween() {
+    const { op, token: opToken } = await operatorWithLogin();
+    const dmc = await prisma.dmc.create({ data: { name: 'Северный Ветер', email: 'b2b@dmc.example', status: 'APPROVED' } });
+    await prisma.account.create({ data: { email: 'b2b@dmc.example', passwordHash: hash, role: 'DMC', dmcId: dmc.id } });
+    const dmcToken = (await http().post('/portal/auth/login').send({ email: 'b2b@dmc.example', password: PASSWORD }).expect(200)).body.accessToken;
+    const pkg = await prisma.package.create({ data: { operatorId: op.id, title: 'Bwindi Trek', slug: 'bwindi', countryCode: 'UG', durationDays: 4, status: 'PUBLISHED', descriptionRu: 'Гориллы' } });
+    const quote = await prisma.quoteRequest.create({ data: { dmcId: dmc.id, packageId: pkg.id, pax: 4, status: 'QUOTED', quotedPrice: 1800, quotedCurrency: 'USD', quotedAt: new Date() } });
+    return { op, opToken, dmc, dmcToken, quote };
+  }
+  const report = (who: 'dmc' | 'operator', token: string, id: string, body: object) => bearer(http().put(`/portal/${who}/quotes/${id}/booking`), token).send(body);
+
+  it('both sides report; matching reports are confirmed and both can see it; the other side is asked to confirm', async () => {
+    const { opToken, dmcToken, quote } = await quoteBetween();
+    await report('dmc', dmcToken, quote.id, { outcome: 'BOOKED' }).expect(400); // needs the date
+    await report('dmc', dmcToken, quote.id, { outcome: 'BOOKED', bookedOn: '2026-10-05', netPrice: 7200, pax: 4 }).expect(400); // price needs currency
+    const first = await report('dmc', dmcToken, quote.id, { outcome: 'BOOKED', bookedOn: '2026-10-05', netPrice: 7200, currency: 'USD', pax: 4 }).expect(200);
+    expect(first.body).toMatchObject({ status: 'CLOSED', booking: { state: 'awaiting_other_side' } });
+    await waitFor((m) => m.to.includes('staff@alpha.example') && m.subject.startsWith('Please confirm: Северный Ветер reports a booking'));
+
+    const opView = await bearer(http().get('/portal/operator/quotes'), opToken).expect(200);
+    expect(opView.body[0].bookingReports).toEqual([expect.objectContaining({ side: 'DMC', outcome: 'BOOKED', pax: 4 })]);
+    const confirmed = await report('operator', opToken, quote.id, { outcome: 'BOOKED', bookedOn: '2026-10-06', netPrice: 7200, currency: 'USD', pax: 4 }).expect(200);
+    expect(confirmed.body.booking).toEqual({ state: 'confirmed', differences: [] });
+    const dmcView = await bearer(http().get('/portal/dmc/quotes'), dmcToken).expect(200);
+    expect(dmcView.body[0].booking.state).toBe('confirmed');
+  });
+
+  it('disagreeing reports are flagged for staff, and correcting one clears the flag', async () => {
+    const { opToken, dmcToken, quote } = await quoteBetween();
+    await report('dmc', dmcToken, quote.id, { outcome: 'BOOKED', bookedOn: '2026-10-05', pax: 4 }).expect(200);
+    const disputed = await report('operator', opToken, quote.id, { outcome: 'BOOKED', bookedOn: '2026-10-05', pax: 6 }).expect(200);
+    expect(disputed.body.booking).toEqual({ state: 'disputed', differences: ['number of travellers'] });
+    await waitFor((m) => m.to.includes('ops@platform.example') && m.subject.startsWith('Booking reports disagree'));
+    expect((await asMod(http().get('/admin/stats')).expect(200)).body.bookingsDisputed).toBe(1);
+    const flagged = await asMod(http().get('/admin/quotes')).expect(200);
+    expect(flagged.body[0].booking.state).toBe('disputed');
+    await report('operator', opToken, quote.id, { outcome: 'BOOKED', bookedOn: '2026-10-05', pax: 4 }).expect(200);
+    expect((await asMod(http().get('/admin/stats')).expect(200)).body.bookingsDisputed).toBe(0);
+  });
+
+  it('each side reports only on its own quotes', async () => {
+    const { quote } = await quoteBetween();
+    const other = await operatorWithLogin('Beta Tours', 'b@beta.example');
+    await report('operator', other.token, quote.id, { outcome: 'NOT_BOOKED' }).expect(404);
+  });
+
+  it('closing a quote as sold in the DMC portal records the DMC’s report', async () => {
+    const { dmcToken, quote } = await quoteBetween();
+    await bearer(http().post(`/portal/dmc/quotes/${quote.id}/close`), dmcToken).send({ outcome: 'booked' }).expect(200);
+    const r = await prisma.quoteBookingReport.findFirstOrThrow({ where: { quoteRequestId: quote.id } });
+    expect(r).toMatchObject({ side: 'DMC', outcome: 'BOOKED' });
+    expect(r.bookedOn).not.toBeNull();
+  });
+
+  it('monthly report: confirmed bookings per operator and per DMC, others listed for follow-up, CSV export', async () => {
+    const { opToken, dmcToken, quote, op } = await quoteBetween();
+    await report('dmc', dmcToken, quote.id, { outcome: 'BOOKED', bookedOn: '2026-10-05', netPrice: 7200, currency: 'USD', pax: 4 }).expect(200);
+    await report('operator', opToken, quote.id, { outcome: 'BOOKED', bookedOn: '2026-10-05', pax: 4 }).expect(200);
+    const pkg2 = await prisma.package.create({ data: { operatorId: op.id, title: 'Lake Tour', slug: 'lake', countryCode: 'UG', durationDays: 2, status: 'PUBLISHED' } });
+    const q2 = await prisma.quoteRequest.create({ data: { dmcId: quote.dmcId, packageId: pkg2.id, pax: 2, status: 'QUOTED' } });
+    await report('dmc', dmcToken, q2.id, { outcome: 'BOOKED', bookedOn: '2026-11-02', pax: 2 }).expect(200); // not confirmed yet
+
+    const r = await asMod(http().get('/admin/bookings?from=2026-10&to=2026-11')).expect(200);
+    expect(r.body.confirmed).toHaveLength(1);
+    expect(r.body.confirmed[0]).toMatchObject({ month: '2026-10', operator: { name: 'Alpha Safaris' }, dmc: { name: 'Северный Ветер' }, pax: 4, netPrice: '7200', currency: 'USD' });
+    expect(r.body.needsAttention).toEqual([expect.objectContaining({ quoteId: q2.id, state: 'awaiting_other_side', month: '2026-11' })]);
+    expect(r.body.byOperator).toEqual([{ month: '2026-10', id: op.id, name: 'Alpha Safaris', bookings: 1, pax: 4 }]);
+    expect(r.body.byDmc).toEqual([expect.objectContaining({ month: '2026-10', name: 'Северный Ветер', bookings: 1, pax: 4 })]);
+    expect((await asMod(http().get('/admin/bookings?from=2026-12&to=2026-12')).expect(200)).body.confirmed).toEqual([]);
+    await asMod(http().get('/admin/bookings?from=2026-11&to=2026-10')).expect(400);
+
+    const csv = await asMod(http().get('/admin/bookings/export.csv?from=2026-10&to=2026-11')).expect(200);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.headers['content-disposition']).toContain('bookings-bookings-2026-10-to-2026-11.csv');
+    const lines = csv.text.replace(/^﻿/, '').trim().split('\r\n');
+    expect(lines[0]).toBe('month,booked_on,operator,dmc,tour,travellers,agreed_net_price,currency,quote_id');
+    expect(lines[1]).toBe(`2026-10,2026-10-05,Alpha Safaris,Северный Ветер,Bwindi Trek,4,7200,USD,${quote.id}`);
+    const perDmc = await asMod(http().get('/admin/bookings/export.csv?from=2026-10&to=2026-11&view=dmcs')).expect(200);
+    expect(perDmc.text.trim().split('\r\n')[1]).toBe('2026-10,Северный Ветер,1,4');
+  });
+
+  it('CSV cells are quoted and formulas neutralised', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { toCsv } = require('../src/bookings/bookings.module');
+    expect(toCsv(['a', 'b'], [['x, y', '=SUM(A1)'], ['say "hi"', null]])).toBe('a,b\r\n"x, y",\'=SUM(A1)\r\n"say ""hi""",\r\n');
+  });
+});

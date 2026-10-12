@@ -30,6 +30,7 @@ import { z } from 'zod';
 import { PrismaService } from '../common/prisma.service';
 import { RevalidationService } from '../common/revalidation.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { BookingsModule, BookingsService, withBooking } from '../bookings/bookings.module';
 import { NotificationsService } from '../mail/notifications.service';
 import { CurrentAccount, PortalAccount, PortalAuthGuard, PortalAuthService, PortalRoles } from './portal-auth';
 
@@ -85,6 +86,7 @@ export class DmcPortalController {
     private readonly auth: PortalAuthService,
     private readonly revalidation: RevalidationService,
     private readonly notifications: NotificationsService,
+    private readonly bookings: BookingsService,
   ) {}
 
   /** Russian DMCs apply here; staff check them before inventory opens. */
@@ -154,12 +156,13 @@ export class DmcPortalController {
   @Get('dmc/quotes')
   @UseGuards(PortalAuthGuard)
   @PortalRoles('DMC')
-  quotes(@CurrentAccount() a: PortalAccount) {
-    return this.prisma.quoteRequest.findMany({
+  async quotes(@CurrentAccount() a: PortalAccount) {
+    const rows = await this.prisma.quoteRequest.findMany({
       where: { dmcId: approvedDmc(a).id },
-      include: { package: { select: { id: true, title: true, titleRu: true, slug: true, durationDays: true, operator: { select: { name: true, slug: true } } } } },
+      include: { bookingReports: true, package: { select: { id: true, title: true, titleRu: true, slug: true, durationDays: true, operator: { select: { name: true, slug: true } } } } },
       orderBy: { createdAt: 'desc' },
     });
+    return rows.map(withBooking);
   }
 
   @Post('dmc/quotes/:id/close')
@@ -171,6 +174,8 @@ export class DmcPortalController {
     const { count } = await this.prisma.quoteRequest.updateMany({ where: { id, dmcId: dmc.id, status: { in: ['OPEN', 'QUOTED'] } }, data: { status: 'CLOSED', closedAt: new Date() } });
     if (count === 0) throw new ConflictException('Запрос не найден или уже закрыт');
     await this.prisma.auditLog.create({ data: { actorAccountId: a.id, action: 'quote.close', entityType: 'quote_request', entityId: id, reason: body.note, metadata: { outcome: body.outcome } } });
+    // Closing also records the DMC's side of the booking report (dated today; details can be added later).
+    await this.bookings.report(id, 'DMC', { outcome: body.outcome === 'booked' ? 'BOOKED' : 'NOT_BOOKED', ...(body.outcome === 'booked' && { bookedOn: new Date().toISOString().slice(0, 10) }), note: body.note }, a, { dmcId: dmc.id });
     return { ok: true };
   }
 
@@ -263,5 +268,5 @@ export class DmcPortalController {
   }
 }
 
-@Module({ controllers: [DmcPortalController] })
+@Module({ imports: [BookingsModule], controllers: [DmcPortalController] })
 export class DmcPortalModule {}

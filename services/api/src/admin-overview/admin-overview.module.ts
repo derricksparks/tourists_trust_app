@@ -6,6 +6,7 @@ import {
   CountryCreateInput,
   CountryUpdateInput,
   OPERATOR_STATUSES,
+  bookingState,
   OperatorStatus,
   countryCreateSchema,
   countryUpdateSchema,
@@ -37,6 +38,9 @@ export class AdminOverviewController {
         this.prisma.quoteRequest.count(),
         this.prisma.translationJob.count({ where: { status: 'COMPLETED' } }),
       ]);
+    // Quotes where the DMC and the operator report different outcomes or details.
+    const twoSided = await this.prisma.quoteRequest.findMany({ where: { bookingReports: { some: { side: 'DMC' } }, AND: { bookingReports: { some: { side: 'OPERATOR' } } } }, select: { bookingReports: true } });
+    const bookingsDisputed = twoSided.filter((q) => bookingState(q.bookingReports).state === 'disputed').length;
     const operatorsByStatus = Object.fromEntries(OPERATOR_STATUSES.map((s) => [s, 0])) as Record<OperatorStatus, number>;
     for (const row of byStatus) {
       operatorsByStatus[row.status] = (row._count as { _all: number })._all;
@@ -53,6 +57,7 @@ export class AdminOverviewController {
       dmcsOnboarded,
       quoteRequests,
       translatorJobsCompleted,
+      bookingsDisputed,
     };
   }
 

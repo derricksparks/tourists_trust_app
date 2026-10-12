@@ -3,6 +3,7 @@ import { NavLink, Navigate, Outlet, Route, Routes, useLocation } from 'react-rou
 import { api } from './api';
 import { useAuth } from './auth';
 import { GuideFormPage, GuidesPage, VisaGuideFormPage, VisaGuidesPage } from './pages/ContentPages';
+import { BookingsPage } from './pages/BookingsPage';
 import { CountriesPage } from './pages/CountriesPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { useCountries } from './countries';
@@ -43,6 +44,7 @@ export function App() {
           <Route path="insurers/:id" element={<InsurerFormPage />} />
           <Route path="dmcs" element={<DmcsPage />} />
           <Route path="quotes" element={<QuotesPage />} />
+          <Route path="bookings" element={<BookingsPage />} />
           <Route path="fam-trips" element={<FamTripsPage />} />
           <Route path="fam-trips/new" element={<FamTripPage />} />
           <Route path="fam-trips/:id" element={<FamTripPage />} />
@@ -74,6 +76,7 @@ function Shell() {
   const openJobs = stats.data?.translationJobsOpen;
   const pendingDmcs = stats.data?.dmcsPending;
   const lateQuotes = stats.data?.quotesUnanswered48h;
+  const disputed = stats.data?.bookingsDisputed;
 
   return (
     <div className="shell">
@@ -106,6 +109,9 @@ function Shell() {
           </NavLink>
           <NavLink to="/quotes">
             Quotes {!!lateQuotes && <span className="count" aria-label={`${lateQuotes} waiting over 48 hours`}>{lateQuotes}</span>}
+          </NavLink>
+          <NavLink to="/bookings">
+            Bookings {!!disputed && <span className="count" aria-label={`${disputed} disagree`}>{disputed}</span>}
           </NavLink>
           <NavLink to="/fam-trips">Fam trips</NavLink>
           <NavLink to="/visa-guides">Visa guides</NavLink>

@@ -33,6 +33,7 @@ import { z } from 'zod';
 import { AdminAuthGuard, AdminRoles, CurrentAdmin } from '../admin-auth/admin-auth.guard';
 import { PrismaService } from '../common/prisma.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { withBooking } from '../bookings/bookings.module';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../mail/notifications.service';
 import { ScoringService } from '../scoring/scoring.service';
@@ -136,13 +137,14 @@ export class AdminB2bController {
   // ── Quotes overview ───────────────────────────────────────────────────────
 
   @Get('quotes')
-  quotes(@Query(new ZodValidationPipe(z.object({ status: z.enum(QUOTE_STATUSES).optional() }))) q: { status?: (typeof QUOTE_STATUSES)[number] }) {
-    return this.prisma.quoteRequest.findMany({
+  async quotes(@Query(new ZodValidationPipe(z.object({ status: z.enum(QUOTE_STATUSES).optional() }))) q: { status?: (typeof QUOTE_STATUSES)[number] }) {
+    const rows = await this.prisma.quoteRequest.findMany({
       where: { status: q.status },
-      include: { dmc: { select: { id: true, name: true } }, package: { select: { id: true, title: true, operator: { select: { id: true, name: true, email: true, phone: true } } } } },
+      include: { bookingReports: true, dmc: { select: { id: true, name: true } }, package: { select: { id: true, title: true, operator: { select: { id: true, name: true, email: true, phone: true } } } } },
       orderBy: { createdAt: 'asc' },
       take: 200,
     });
+    return rows.map(withBooking);
   }
 
   // ── Operator scores ───────────────────────────────────────────────────────

@@ -258,6 +258,7 @@ These keep the meaning of the spec's fields but change how they are stored:
 | *(Phase 4, approved 2026-10-10)* new `api_keys` | operator, name, prefix, sha256 hash, last used, revoked | package feed API (B2B-1 "API later"); the key itself is shown once and never stored |
 | *(Phase 4, approved 2026-10-10)* `Country` | + `name_ru_in`, `active`, `licensing_authority`, `licence_register_url`, `created_at` | countries are added and switched on by staff instead of being hard-coded; Russian page titles need the locative ("в Уганде") |
 | *(Pilot round, requested 2026-10-12)* new `inquiry_replies` | inquiry, body, author (operator login **or** staff, CHECK at most one), delivered via (Telegram/email), time | operators answer travellers in the portal; staff answers on their behalf are recorded as such; the score uses operator answers only. Earlier staff answers were copied in from the audit log |
+| *(Pilot round, requested 2026-10-12)* new `quote_booking_reports` | quote, side (DMC/operator, one each), outcome (booked/not booked), booked on, agreed net price + currency, travellers, note | both sides say whether a quote became a booking; disagreements are flagged; monthly report for invoicing introduction fees by hand. Display/reporting only, no payment fields. Earlier DMC "close: sold / not sold" outcomes copied in from the audit log |
 
 ---
 
@@ -404,4 +405,20 @@ Small round before a pilot with 5–10 operators and 2–3 DMCs. Still no paymen
   staff counts as unanswered by the operator (72 h once 72 h have passed). A question staff closed without an
   operator answer (spam, duplicates) is left out.
 - Not built: travellers replying back in the thread (their Telegram replies to the bot are not threaded).
+
+### 2. "Booked" status on quotes
+
+- Each side reports whether a quote became a booking (`PUT /portal/{dmc|operator}/quotes/:id/booking`): booked
+  (with the booking date, optionally the agreed net price and number of travellers) or not booked. A side can
+  correct its report; every report is in the audit log. Reporting closes the quote. The DMC's existing
+  "close" action records the DMC's report too.
+- Both sides see both reports and the combined state, defined once in shared-types (`bookingState`):
+  *awaiting the other side*, *confirmed* (both booked, travellers and price match where both gave them),
+  *not booked*, or *disputed* (different outcome, travellers or price). The other side is emailed to confirm a
+  reported booking; staff are emailed when reports disagree, and the dashboard counts disputed quotes.
+- Admin **Bookings** report: for a range of months (by booking date), confirmed bookings per operator and per
+  DMC with traveller counts, every confirmed booking, and a follow-up list (one-sided or disputed, not in the
+  totals). CSV exports: bookings, totals per operator, totals per DMC (UTF-8 with BOM for Excel; cells that
+  look like formulas are neutralised). Used to invoice introduction fees by hand: no billing or payment
+  features were added.
 

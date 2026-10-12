@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DMC_STATUSES, DMC_TRANSITIONS, DmcDecision, DmcStatus, FAM_TRIP_STATUSES, FamTripStatus, QUOTE_STATUSES, QuoteStatus, famTripSchema } from '@ttp/shared-types';
+import { BookingState, DMC_STATUSES, DMC_TRANSITIONS, DmcDecision, DmcStatus, FAM_TRIP_STATUSES, FamTripStatus, QUOTE_STATUSES, QuoteStatus, famTripSchema } from '@ttp/shared-types';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError, Dmc, FamTripDetail } from '../api';
@@ -163,6 +163,9 @@ export function OperatorPortalPanel({ operatorId, approved }: { operatorId: stri
 
 const QUOTE_LABEL: Record<QuoteStatus, string> = { OPEN: 'Waiting for operator', QUOTED: 'Quoted', CLOSED: 'Closed' };
 
+export const BOOKING_LABEL: Record<BookingState, string> = { none: '', awaiting_other_side: 'One side reported', confirmed: 'Booked (confirmed)', not_booked: 'Not booked', disputed: 'Reports disagree' };
+export const BOOKING_PILL: Record<BookingState, string> = { none: 'CLOSED', awaiting_other_side: 'PENDING', confirmed: 'APPROVED', not_booked: 'CLOSED', disputed: 'FLAGGED' };
+
 export function QuotesPage() {
   const [params, setParams] = useSearchParams();
   const status = (QUOTE_STATUSES as readonly string[]).includes(params.get('status') ?? '') ? (params.get('status') as QuoteStatus) : 'OPEN';
@@ -180,7 +183,7 @@ export function QuotesPage() {
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Operator</th><th>DMC</th><th>Tour</th><th>Group</th><th>Asked</th></tr></thead>
+          <thead><tr><th>Operator</th><th>DMC</th><th>Tour</th><th>Group</th><th>Asked</th><th>Booking</th></tr></thead>
           <tbody>
             {list.data?.map((q) => {
               const late = q.status === 'OPEN' && now - new Date(q.createdAt).getTime() > 48 * 3600 * 1000;
@@ -191,6 +194,15 @@ export function QuotesPage() {
                   <td>{q.package.title}</td>
                   <td className="num">{q.pax ?? '—'}{q.travelStartDate && ` · ${formatDate(q.travelStartDate)}`}</td>
                   <td className="num" style={{ whiteSpace: 'nowrap' }}>{formatDate(q.createdAt)} {late && <StatusPill status="FLAGGED" label="Over 48 h" />}</td>
+                  <td>
+                    {q.booking.state !== 'none' && <StatusPill status={BOOKING_PILL[q.booking.state]} label={BOOKING_LABEL[q.booking.state]} />}
+                    {q.booking.differences.length > 0 && <div className="muted" style={{ fontSize: '0.82rem' }}>Differ on: {q.booking.differences.join(', ')}</div>}
+                    {q.bookingReports.map((r) => (
+                      <div key={r.side} className="muted" style={{ fontSize: '0.82rem' }}>
+                        {r.side === 'DMC' ? 'DMC' : 'Operator'}: {r.outcome === 'BOOKED' ? `booked${r.bookedOn ? ` ${formatDate(r.bookedOn)}` : ''}${r.pax ? `, ${r.pax} pax` : ''}${r.netPrice && r.currency ? `, ${r.netPrice} ${r.currency}` : ''}` : 'not booked'}
+                      </div>
+                    ))}
+                  </td>
                 </tr>
               );
             })}

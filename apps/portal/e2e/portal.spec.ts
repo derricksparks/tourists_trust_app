@@ -188,3 +188,15 @@ test('an operator answers a traveller’s question from the inbox; it goes out i
   const calls = await (await request.get('http://localhost:8099/__messages')).json();
   expect(calls.find((c: { chat_id?: string }) => c.chat_id === '100000005')?.text).toContain('From 3,900 USD per person.');
 });
+
+test('an operator confirms a booking the DMC reported', async ({ page }) => {
+  await signIn(page, 'operator@example.com');
+  await page.getByRole('link', { name: /^Quote requests/ }).click();
+  const card = page.getByRole('article').filter({ hasText: 'Северный Ветер Тур (demo)' }).filter({ hasText: 'The DMC' }).first();
+  await expect(card).toContainText('Booked');
+  await expect(card).toContainText('Waiting for the other side to confirm');
+  await card.getByLabel('Travellers').fill('4');
+  await card.getByLabel('Agreed net price (optional)').fill('8800');
+  await card.getByRole('button', { name: 'Save' }).click();
+  await expect(card).toContainText('Confirmed by both sides');
+});

@@ -91,6 +91,8 @@ Then fill these in `infra/production/.env` (step 4):
 | A traveller asks a question in the Mini App | the operator's logins (answer in the portal Inbox); staff if the operator has no login yet | EN |
 | A DMC requests a quote | the operator's logins; staff if the operator has no login yet | EN |
 | An operator quotes or declines | the DMC | RU |
+| A DMC or operator reports a quote as booked | the other side, to confirm | RU to DMCs, EN to operators |
+| The two booking reports disagree | staff | EN |
 | A DMC asks to join a fam trip | staff | EN |
 | Staff add an operator to a fam trip, or confirm a DMC's place | that operator / DMC | EN / RU |
 

@@ -262,3 +262,20 @@ test('a super admin switches a new country on', async ({ page }) => {
   await expect(zambia).toContainText('On');
   await expect(zambia).toContainText('Zambia Tourism Agency (demo)');
 });
+
+test('staff see confirmed bookings by month and export them as CSV', async ({ page }) => {
+  await signIn(page, 'moderator@example.com');
+  await page.getByRole('link', { name: /^Bookings/ }).click();
+  const confirmed = page.getByRole('region', { name: 'Confirmed bookings', exact: true });
+  await expect(confirmed).toContainText('Kilima Horizon Safaris (demo)');
+  await expect(confirmed).toContainText('Солнечный Путь (demo)');
+  await expect(confirmed).toContainText('5800 USD');
+  await expect(page.getByRole('region', { name: 'Needs follow-up' })).toContainText('One side reported');
+  await expect(page.getByRole('table', { name: 'Per operator' })).toContainText('Kilima Horizon Safaris (demo)');
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export bookings (CSV)' }).click();
+  const file = await download;
+  const text = (await (await file.createReadStream()).toArray()).join('');
+  expect(text).toContain('month,booked_on,operator,dmc,tour,travellers,agreed_net_price,currency,quote_id');
+  expect(text).toContain('Солнечный Путь (demo)');
+});

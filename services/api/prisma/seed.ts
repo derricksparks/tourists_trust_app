@@ -244,7 +244,7 @@ async function main() {
   const dmcB = await prisma.dmc.create({ data: { name: 'Байкал Экспедиции (demo)', websiteUrl: 'https://baikal-exp.example.com', status: 'PENDING' } });
   await prisma.dmcPackageListing.create({ data: { dmcId: dmcA.id, packageId: gorilla.id, whiteLabelTitle: 'Гориллы Уганды — эксклюзивно (демо)', dmcPageUrl: 'https://severny-veter.example.com/uganda-gorillas' } });
   await prisma.quoteRequest.create({ data: { dmcId: dmcA.id, packageId: serengeti.id, createdAt: new Date(Date.now() - 5 * 3600 * 1000), pax: 6, travelStartDate: day('2027-07-01'), travelEndDate: day('2027-07-06'), notes: 'Нужна net-цена для группы (демо)' } });
-  await prisma.quoteRequest.create({
+  const quotedGorilla = await prisma.quoteRequest.create({
     data: { dmcId: dmcA.id, packageId: gorilla.id, pax: 4, status: 'QUOTED', quotedPrice: 2200, quotedCurrency: 'USD', quoteTerms: 'Per person, net, valid 30 days (demo).', createdAt: new Date('2026-09-19T00:00:00Z'), quotedAt: new Date('2026-09-20T00:00:00Z') },
   });
 
@@ -396,6 +396,23 @@ async function main() {
   await prisma.account.create({ data: { email: 'flagged@example.com', passwordHash: portalHash, role: 'OPERATOR', operatorId: rift.id } });
   // Feed API key for Pearl. A fixed, fictional key so the docs' curl examples work against the dev database.
   await prisma.apiKey.create({ data: { operatorId: pearl.id, name: 'Website sync (demo)', prefix: DEMO_FEED_KEY.slice(0, 12), keyHash: sha256(DEMO_FEED_KEY) } });
+
+  // ── Pilot round: booking reports on quotes (for invoicing introduction fees by hand) ──
+  const thisMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 3));
+  const lastMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 12));
+  // The DMC says the gorilla quote was booked; Pearl hasn't confirmed yet.
+  await prisma.quoteRequest.update({ where: { id: quotedGorilla.id }, data: { status: 'CLOSED', closedAt: thisMonth } });
+  await prisma.quoteBookingReport.create({ data: { quoteRequestId: quotedGorilla.id, side: 'DMC', outcome: 'BOOKED', bookedOn: thisMonth, pax: 4, netPrice: 8800, currency: 'USD' } });
+  // A booking both sides confirmed last month.
+  const confirmed = await prisma.quoteRequest.create({
+    data: { dmcId: dmcC.id, packageId: serengeti.id, pax: 2, status: 'CLOSED', quotedPrice: 2900, quotedCurrency: 'USD', quoteTerms: 'Per person, net (demo).', createdAt: lastMonth, quotedAt: lastMonth, closedAt: lastMonth },
+  });
+  await prisma.quoteBookingReport.createMany({
+    data: [
+      { quoteRequestId: confirmed.id, side: 'DMC', outcome: 'BOOKED', bookedOn: lastMonth, pax: 2, netPrice: 5800, currency: 'USD' },
+      { quoteRequestId: confirmed.id, side: 'OPERATOR', outcome: 'BOOKED', bookedOn: lastMonth, pax: 2, netPrice: 5800, currency: 'USD' },
+    ],
+  });
 
   // Operator scores (spec TV-6) are computed, never typed in.
   const scoring = new ScoringService(prisma as unknown as PrismaService);
