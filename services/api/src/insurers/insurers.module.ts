@@ -6,6 +6,13 @@ import { PrismaService } from '../common/prisma.service';
 import { RevalidationService } from '../common/revalidation.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 
+/** A given "verified on" day wins (null clears it); otherwise ticking "facts verified" records now. */
+function verification(admin: AdminUser, input: { factsVerified?: boolean; verifiedOn?: string | null }) {
+  if (input.verifiedOn === null) return { verifiedAt: null, verifiedById: null };
+  if (input.verifiedOn) return { verifiedAt: new Date(`${input.verifiedOn}T00:00:00Z`), verifiedById: admin.id };
+  return input.factsVerified ? { verifiedAt: new Date(), verifiedById: admin.id } : {};
+}
+
 /** Insurance guidance (IN-1, IN-2): informational comparison only, no underwriting or sales. */
 @Controller()
 export class InsurersController {
@@ -32,6 +39,8 @@ export class InsurersController {
       exclusionsRu: i.exclusionsRu,
       medicalLimitInfo: i.medicalLimitInfo,
       verifiedAt: i.verifiedAt?.toISOString() ?? null,
+      sourceUrl: i.sourceUrl,
+      verified: !!i.verifiedAt && !!i.sourceUrl,
     }));
   }
 
@@ -53,8 +62,8 @@ export class InsurersController {
   @UseGuards(AdminAuthGuard)
   @AdminRoles('SUPER_ADMIN', 'CONTENT_EDITOR')
   async create(@Body(new ZodValidationPipe(insurerCreateSchema)) body: InsurerCreateInput, @CurrentAdmin() admin: AdminUser) {
-    const { factsVerified, ...data } = body;
-    const i = await this.prisma.insurer.create({ data: { ...data, ...(factsVerified && { verifiedAt: new Date(), verifiedById: admin.id }) } });
+    const { factsVerified, verifiedOn, ...data } = body;
+    const i = await this.prisma.insurer.create({ data: { ...data, ...verification(admin, body) } });
     await this.audit(admin, 'insurer.create', i.id, { published: i.published, factsVerified: !!factsVerified });
     return i;
   }
@@ -63,9 +72,9 @@ export class InsurersController {
   @UseGuards(AdminAuthGuard)
   @AdminRoles('SUPER_ADMIN', 'CONTENT_EDITOR')
   async update(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(insurerUpdateSchema)) body: InsurerUpdateInput, @CurrentAdmin() admin: AdminUser) {
-    const { factsVerified, ...data } = body;
+    const { factsVerified, verifiedOn, ...data } = body;
     const i = await this.prisma.insurer
-      .update({ where: { id }, data: { ...data, ...(factsVerified && { verifiedAt: new Date(), verifiedById: admin.id }) } })
+      .update({ where: { id }, data: { ...data, ...verification(admin, body) } })
       .catch((e) => {
         if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') throw new NotFoundException('Insurer not found');
         throw e;

@@ -5,6 +5,7 @@ import { useAuth } from './auth';
 import { GuideFormPage, GuidesPage, VisaGuideFormPage, VisaGuidesPage } from './pages/ContentPages';
 import { BookingsPage } from './pages/BookingsPage';
 import { CountriesPage } from './pages/CountriesPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { useCountries } from './countries';
 import { DmcsPage, FamTripPage, FamTripsPage, QuotesPage } from './pages/B2bPages';
@@ -49,6 +50,7 @@ export function App() {
           <Route path="fam-trips/new" element={<FamTripPage />} />
           <Route path="fam-trips/:id" element={<FamTripPage />} />
           <Route path="countries" element={<CountriesPage />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>
@@ -118,6 +120,7 @@ function Shell() {
           <NavLink to="/guides">Travel guides</NavLink>
           <NavLink to="/insurers">Insurers</NavLink>
           <NavLink to="/countries">Countries</NavLink>
+          <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="who">
           <span>

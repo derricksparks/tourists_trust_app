@@ -22,7 +22,7 @@ export function InsurersPage() {
           <h1>Insurers</h1>
           <p className="muted" style={{ maxWidth: '70ch' }}>
             The comparison table on the <a href={`${PUBLIC_SITE}/insurance`} target="_blank" rel="noopener noreferrer">insurance page</a>. Call each
-            insurer to confirm they really pay claims and repatriate from these countries, then tick “verified”. We never sell policies.
+            insurer to confirm they really pay claims and repatriate from these countries, then record the day and the source. Without both, the site shows “not yet verified”. We never sell policies.
           </p>
         </div>
         {canEdit && <Link to="/insurers/new" className="btn primary">New</Link>}
@@ -45,7 +45,7 @@ export function InsurersPage() {
                 <td><Link className="title" to={`/insurers/${i.id}`}>{i.name}</Link>{i.nameRu && <div className="muted" style={{ fontSize: '0.84rem' }} lang="ru">{i.nameRu}</div>}</td>
                 <td>{i.countriesCovered.join(', ')}</td>
                 <td>{i.repatriationConfirmed ? 'Confirmed' : <span className="muted">Not confirmed</span>}</td>
-                <td className="num">{i.verifiedAt ? formatDate(i.verifiedAt) : <span className="muted">Never</span>}</td>
+                <td className="num">{i.verifiedAt && i.sourceUrl ? formatDate(i.verifiedAt) : <span className="pill s-FLAGGED">Not verified</span>}</td>
                 <td><StatusPill status={i.published ? 'PUBLISHED' : 'DRAFT'} label={i.published ? 'Published' : 'Hidden'} /></td>
               </tr>
             ))}
@@ -57,7 +57,8 @@ export function InsurersPage() {
   );
 }
 
-const empty = { name: '', nameRu: '', websiteUrl: '', countriesCovered: ['UG', 'TZ', 'KE'], claimsContact: '', repatriationConfirmed: false, coverageRu: '', exclusionsRu: '', medicalLimitInfo: '', notes: '', published: false };
+const empty = { name: '', nameRu: '', websiteUrl: '', countriesCovered: ['UG', 'TZ', 'KE'], claimsContact: '', repatriationConfirmed: false, coverageRu: '', exclusionsRu: '', medicalLimitInfo: '', notes: '', published: false, sourceUrl: '', verifiedOn: '' };
+const today = () => new Date().toISOString().slice(0, 10);
 
 export function InsurerFormPage() {
   const COUNTRIES = useActiveCountryCodes();
@@ -73,7 +74,7 @@ export function InsurerFormPage() {
   const [formError, setFormError] = useState<string | null>(null);
   useEffect(() => {
     const i = existing.data;
-    if (i) setV({ ...empty, ...Object.fromEntries(Object.entries(i).map(([k, val]) => [k, val ?? ''])), countriesCovered: i.countriesCovered, repatriationConfirmed: i.repatriationConfirmed, published: i.published } as typeof empty);
+    if (i) setV({ ...empty, ...Object.fromEntries(Object.entries(i).map(([k, val]) => [k, val ?? ''])), countriesCovered: i.countriesCovered, repatriationConfirmed: i.repatriationConfirmed, published: i.published, verifiedOn: i.verifiedAt?.slice(0, 10) ?? '' } as typeof empty);
   }, [existing.data]);
 
   const payload = () => {
@@ -81,7 +82,10 @@ export function InsurerFormPage() {
     return {
       name: v.name, claimsContact: v.claimsContact, countriesCovered: v.countriesCovered, repatriationConfirmed: v.repatriationConfirmed, published: v.published,
       nameRu: blankToNull(v.nameRu), websiteUrl: blankToNull(v.websiteUrl), coverageRu: blankToNull(v.coverageRu), exclusionsRu: blankToNull(v.exclusionsRu),
-      medicalLimitInfo: blankToNull(v.medicalLimitInfo), notes: blankToNull(v.notes), ...(verified && { factsVerified: true }),
+      medicalLimitInfo: blankToNull(v.medicalLimitInfo), notes: blankToNull(v.notes), sourceUrl: blankToNull(v.sourceUrl),
+      // Only send the day when it was changed here, so saving doesn't move an existing timestamp.
+      ...(v.verifiedOn !== (existing.data?.verifiedAt?.slice(0, 10) ?? '') && !verified && { verifiedOn: v.verifiedOn || null }),
+      ...(verified && { factsVerified: true }),
     };
   };
   const save = useMutation({
@@ -111,7 +115,7 @@ export function InsurerFormPage() {
     }
     save.mutate();
   }
-  const text = (k: 'name' | 'nameRu' | 'websiteUrl' | 'claimsContact' | 'medicalLimitInfo', label: string, hint?: string, lang?: string) => (
+  const text = (k: 'name' | 'nameRu' | 'websiteUrl' | 'claimsContact' | 'medicalLimitInfo' | 'sourceUrl', label: string, hint?: string, lang?: string) => (
     <div className="field">
       <label htmlFor={k}>{label}</label>
       <input id={k} lang={lang} value={v[k]} onChange={(e) => set(k, e.target.value)} aria-invalid={!!errors[k]} />
@@ -172,8 +176,16 @@ export function InsurerFormPage() {
               <input type="checkbox" style={{ width: 'auto' }} checked={v.published} onChange={(e) => set('published', e.target.checked)} /> Show on the insurance page
             </label>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input type="checkbox" style={{ width: 'auto' }} checked={verified} onChange={(e) => setVerified(e.target.checked)} /> I confirmed claims and repatriation with the insurer today
+              <input type="checkbox" style={{ width: 'auto' }} checked={verified} onChange={(e) => { setVerified(e.target.checked); if (e.target.checked) set('verifiedOn', today()); }} /> I confirmed claims and repatriation with the insurer today
             </label>
+            <div className="form-grid">
+              {text('sourceUrl', 'Source checked', 'The insurer’s page with the policy terms you checked (shown to readers as “source”).')}
+              <div className="field">
+                <label htmlFor="verifiedOn">Verified on</label>
+                <input id="verifiedOn" type="date" max={today()} value={v.verifiedOn} disabled={verified} onChange={(e) => set('verifiedOn', e.target.value)} style={{ width: 'auto' }} />
+                <span className="hint">Readers see “checked on … · source” only when both are filled in.</span>
+              </div>
+            </div>
             {existing.data?.verifiedAt && <span className="hint">Last verified {formatDate(existing.data.verifiedAt)}{existing.data.verifiedBy ? ` by ${existing.data.verifiedBy.name}` : ''}.</span>}
           </fieldset>
         </section>

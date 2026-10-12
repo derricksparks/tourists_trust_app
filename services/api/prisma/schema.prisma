@@ -214,6 +214,8 @@ model AdminUser {
   verifiedInsurers        Insurer[]
   updatedVisaApplications VisaApplication[]
   inquiryReplies          InquiryReply[]
+  deletedDocuments        OperatorDocument[] @relation("OperatorDocumentDeletedBy")
+  updatedSettings         SiteSetting[]
 
   @@map("admin_users")
 }
@@ -333,9 +335,12 @@ model OperatorDocument {
   reviewNotes      String?              @map("review_notes")
   reviewedAt       DateTime?            @map("reviewed_at")
   createdAt        DateTime             @default(now()) @map("created_at")
+  deletedAt        DateTime?            @map("deleted_at") // pilot round: file erased by staff (retention); row kept for the record
+  deletedById      String?              @map("deleted_by_id") @db.Uuid
 
   operator   Operator   @relation(fields: [operatorId], references: [id], onDelete: Cascade)
   reviewedBy AdminUser? @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+  deletedBy  AdminUser? @relation("OperatorDocumentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([operatorId])
   @@map("operator_documents")
@@ -713,6 +718,7 @@ model Insurer {
   medicalLimitInfo      String?   @map("medical_limit_info") // free text, e.g. "up to 50 000 EUR"
   verifiedAt            DateTime? @map("verified_at")
   verifiedById          String?   @map("verified_by_id") @db.Uuid
+  sourceUrl             String?   @map("source_url") // pilot round: where the facts were checked; without it and verifiedAt, "not yet verified"
   notes                 String?
   published             Boolean   @default(false)
   createdAt             DateTime  @default(now()) @map("created_at")
@@ -738,7 +744,9 @@ model VisaGuide {
   feeInfo          String?       @map("fee_info") // display text only, e.g. "USD 30"
   processingTime   String?       @map("processing_time")
   status           ContentStatus @default(DRAFT)
-  lastUpdated      DateTime      @default(now()) @map("last_updated") // last time the facts were verified
+  lastUpdated      DateTime      @default(now()) @map("last_updated") // last time it was published or ticked "facts verified"
+  verifiedOn       DateTime?     @map("verified_on") @db.Date // pilot round: day the facts were checked against sourceUrl
+  sourceUrl        String?       @map("source_url") // where the facts were checked; without both, readers see "not yet verified"
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
 
@@ -796,6 +804,20 @@ model DestinationGuide {
 // ─── Audit ────────────────────────────────────────────────────────────────────
 
 /// Who changed what and why: approvals, rejections, moderation, status changes (B2 addition).
+/// Wording and limits a super admin changes without a code change (pilot round): the visa and
+/// insurance disclaimers, and how long operators' licence copies are kept. Keys: SITE_SETTING_KEYS.
+model SiteSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  value       String
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  updatedBy AdminUser? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("site_settings")
+}
+
 model AuditLog {
   id             String   @id @default(uuid()) @db.Uuid
   actorAdminId   String?  @map("actor_admin_id") @db.Uuid

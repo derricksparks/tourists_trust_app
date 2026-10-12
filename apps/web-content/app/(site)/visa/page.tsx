@@ -29,7 +29,8 @@ export default async function VisaListPage() {
             <p className="meta">
               {g.coveredCountries.length > 1 ? `Действует ${g.coveredCountries.map(countryRuIn).join(', ')}` : `Для поездки ${countryRuIn(g.countryCode)}`}
             </p>
-            <p className="meta">Проверено {dateRu(g.lastUpdated)}</p>
+            {/* The card is a link, so no source link inside it; the guide page has it. */}
+            <p className="meta">{g.verified && g.verifiedOn ? `Проверено ${dateRu(g.verifiedOn)}` : <span className="unverified">Ещё не проверено</span>}</p>
           </Link>
         ))}
       </div>

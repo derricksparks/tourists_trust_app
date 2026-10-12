@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Checklist } from '@/components/Checklist';
+import { Disclaimer } from '@/components/Disclaimer';
+import { Verification } from '@/components/Verification';
 import { publicApi } from '@/lib/api';
-import { countryRu, countryRuIn, dateRu } from '@/lib/format';
+import { countryRu, countryRuIn } from '@/lib/format';
 import { renderMarkdown } from '@/lib/markdown';
 import { loadCountries } from '@/lib/countries';
 
@@ -31,8 +33,9 @@ export default async function VisaGuidePage({ params }: Props) {
         <h1>{g.titleRu}</h1>
         <p className="muted">
           {g.visaType}
-          {g.coveredCountries.length > 1 && ` · действует: ${g.coveredCountries.map(countryRu).join(', ')}`} · проверено {dateRu(g.lastUpdated)}
+          {g.coveredCountries.length > 1 && ` · действует: ${g.coveredCountries.map(countryRu).join(', ')}`}
         </p>
+        <Verification verifiedOn={g.verifiedOn} sourceUrl={g.sourceUrl} />
       </header>
 
       <div className="two">
@@ -77,6 +80,7 @@ export default async function VisaGuidePage({ params }: Props) {
           </Link>
         </aside>
       </div>
+      <Disclaimer kind="visa" />
     </article>
   );
 }

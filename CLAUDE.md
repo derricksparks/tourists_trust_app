@@ -43,6 +43,10 @@ Pinned versions are deliberate; don't bump majors without asking.
   `node dist/cli/setup.js <email> "<name>" [role]` creates staff logins and the country list.
 - Telegram from the API: `TelegramBotApi` (send only). The bot process forwards button presses to `/bot/*`,
   authenticated with `X-Bot-Secret` = HMAC-SHA256(bot token, "ttp-bot-internal"); no extra secret to configure.
+- Content safety (pilot round): visa guides and insurers are "verified" only with both a verified-on date and a
+  source link (`verified` in the public API). Disclaimers and the document retention period live in `site_settings`
+  (`src/settings`, super admin only). Licence copies are deleted by staff with `DocumentRetentionService.delete`
+  (erase the file, keep the row, audit it); every read of a document must check `deletedAt`.
 - Public endpoints (`/public/*`) must only ever return approved operators and published content, and never
   internal fields (status reasons, reference contacts, documents, badge tokens). `test/public.e2e.spec.ts` checks this.
 - Public site pages read the API at request time with tag-cached fetches (`lib/api.ts`); the API calls

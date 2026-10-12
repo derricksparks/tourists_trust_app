@@ -26,5 +26,6 @@ export const ACTION_LABELS: Record<string, string> = {
   'operator.submit': 'Application sent for review',
   'operator.document_upload': 'Document uploaded',
   'operator.document_view': 'Document opened',
+  'operator.document_delete': 'Document file deleted',
   'operator.document_review': 'Document checked',
 };

@@ -1,6 +1,8 @@
 import type {
   BookingState,
   AdminCountry,
+  AdminSiteSettings,
+  SiteSettingsUpdateInput,
   CountryCreateInput,
   CountryUpdateInput,
   AdminLoginResult,
@@ -83,6 +85,13 @@ export interface HistoryEntry {
 export interface OperatorDocument {
   id: string; type: string; originalFilename: string; contentType: string; sizeBytes: number;
   reviewNotes: string | null; reviewedAt: string | null; createdAt: string;
+  /** Pilot round: the file was erased by staff (retention); the row stays for the record. */
+  deletedAt: string | null; deletedBy?: { id: string; name: string } | null;
+}
+
+export interface RetentionDue {
+  retentionDays: number | null;
+  documents: { id: string; type: string; originalFilename: string; createdAt: string; reviewedAt: string | null; operator: { id: string; name: string; status: OperatorStatus } }[];
 }
 
 export interface OperatorDetail extends Operator {
@@ -146,6 +155,9 @@ export interface VisaGuide {
   processingTime: string | null;
   status: ContentStatus;
   lastUpdated: string;
+  /** Pilot round: day the facts were checked, and where. Without both the site says "not yet verified". */
+  verifiedOn: string | null;
+  sourceUrl: string | null;
   updatedAt: string;
 }
 
@@ -221,6 +233,7 @@ export interface Insurer {
   published: boolean;
   verifiedAt: string | null;
   verifiedBy: { name: string } | null;
+  sourceUrl: string | null;
 }
 
 export interface ReviewInvite {
@@ -363,6 +376,11 @@ export const api = {
     window.open(URL.createObjectURL(await res.blob()), '_blank', 'noopener');
   },
   reviewDocument: (operatorId: string, id: string, notes: string) => request<OperatorDocument>('POST', `/admin/operators/${operatorId}/documents/${id}/review`, { notes }),
+  deleteDocument: (operatorId: string, id: string, reason: string) => request<OperatorDocument>('DELETE', `/admin/operators/${operatorId}/documents/${id}`, { reason }),
+  settings: () => request<AdminSiteSettings>('GET', '/admin/settings'),
+  updateSettings: (body: SiteSettingsUpdateInput) => request<AdminSiteSettings>('PUT', '/admin/settings', body),
+  retentionDue: () => request<RetentionDue>('GET', '/admin/documents/retention'),
+  purgeRetention: () => request<{ deleted: number }>('POST', '/admin/documents/retention/purge'),
 
   operators: (p: { status?: OperatorStatus; countryCode?: string; q?: string; page?: number }) =>
     request<Paginated<Operator>>('GET', `/admin/operators${qs(p)}`),

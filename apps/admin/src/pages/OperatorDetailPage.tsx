@@ -248,6 +248,17 @@ function DocumentsPanel({ operatorId, documents, registerUrl, canModerate }: { o
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['operator', operatorId] }),
     onError: (e) => setError(e instanceof ApiError ? e.message : 'Could not save the note.'),
   });
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const remove = useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) => api.deleteDocument(operatorId, id, text),
+    onSuccess: () => {
+      setDeleting(null);
+      setReason('');
+      void queryClient.invalidateQueries({ queryKey: ['operator', operatorId] });
+    },
+    onError: (e) => setError(e instanceof ApiError ? e.message : 'Could not delete the document.'),
+  });
   const open = (id: string) => {
     setError(null);
     api.openDocument(operatorId, id).then(() => queryClient.invalidateQueries({ queryKey: ['operator', operatorId] })).catch((e: Error) => setError(e.message));
@@ -260,7 +271,14 @@ function DocumentsPanel({ operatorId, documents, registerUrl, canModerate }: { o
       </div>
       {documents.length === 0 && <p className="muted">No documents uploaded. Operators upload them from the partner portal; for operators you entered yourself, record what you checked in the decision reason.</p>}
       <ul className="doclist">
-        {documents.map((d) => (
+        {documents.map((d) => d.deletedAt ? (
+          <li key={d.id}>
+            <span>
+              <strong>{DOC_TYPE[d.type] ?? d.type}</strong> <span className="muted">· {d.originalFilename} · {formatDate(d.createdAt)}</span>
+            </span>
+            <span className="muted">File deleted {formatDate(d.deletedAt)}{d.deletedBy ? ` by ${d.deletedBy.name}` : ''}{d.reviewedAt ? ` · it was checked ${formatDate(d.reviewedAt)}${d.reviewNotes ? `: ${d.reviewNotes}` : ''}` : ''}</span>
+          </li>
+        ) : (
           <li key={d.id}>
             <span>
               <strong>{DOC_TYPE[d.type] ?? d.type}</strong> <span className="muted">· {d.originalFilename} · {formatDate(d.createdAt)}</span>
@@ -276,6 +294,15 @@ function DocumentsPanel({ operatorId, documents, registerUrl, canModerate }: { o
                 </form>
               )
             )}
+            {canModerate && (deleting === d.id ? (
+              <form className="row-wrap" onSubmit={(e) => { e.preventDefault(); remove.mutate({ id: d.id, text: reason }); }}>
+                <input aria-label={`Why delete ${d.originalFilename}`} placeholder="Reason, e.g. retention period passed" value={reason} onChange={(e) => setReason(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+                <button className="btn danger" type="submit" disabled={reason.trim().length < 3 || remove.isPending}>Delete file</button>
+                <button className="btn" type="button" onClick={() => setDeleting(null)}>Cancel</button>
+              </form>
+            ) : (
+              <button className="btn link" style={{ justifySelf: 'start', color: 'var(--bad)' }} onClick={() => { setDeleting(d.id); setReason(''); }} aria-label={`Delete ${d.originalFilename}`}>Delete…</button>
+            ))}
           </li>
         ))}
       </ul>

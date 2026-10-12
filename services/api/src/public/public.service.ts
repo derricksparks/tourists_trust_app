@@ -207,6 +207,9 @@ function toPublicVisaGuide(g: Prisma.VisaGuideGetPayload<object>): PublicVisaGui
     feeInfo: g.feeInfo,
     processingTime: g.processingTime,
     lastUpdated: g.lastUpdated.toISOString(),
+    verifiedOn: g.verifiedOn ? isoDate(g.verifiedOn) : null,
+    sourceUrl: g.sourceUrl,
+    verified: !!g.verifiedOn && !!g.sourceUrl,
   };
 }
 

@@ -30,7 +30,7 @@ export function VisaGuidesPage() {
     <ContentList
       eyebrow="Concierge"
       title="Visa guides"
-      intro="Step-by-step visa instructions and document checklists on the public site. Re-check the facts against the official site regularly; readers see the date you last did."
+      intro="Step-by-step visa instructions and document checklists on the public site. Record the day you checked the facts and the page you checked them on; until both are set, readers see “not yet verified”."
       newHref="/visa-guides/new"
       loading={list.isLoading}
       error={!!list.error}
@@ -40,7 +40,7 @@ export function VisaGuidesPage() {
         title: g.titleRu,
         detail: `${g.visaType} · ${g.coveredCountries.map(countryName).join(', ')}`,
         status: g.status,
-        checked: g.lastUpdated,
+        checked: g.verifiedOn && g.sourceUrl ? g.verifiedOn : null,
         publicHref: `${PUBLIC_SITE}/visa/${g.slug}`,
       }))}
     />
@@ -76,7 +76,8 @@ interface Row {
   title: string;
   detail: string;
   status: ContentStatus;
-  checked: string;
+  /** null: shown to readers as "not yet verified". */
+  checked: string | null;
   publicHref: string;
 }
 
@@ -111,7 +112,7 @@ function ContentList(props: { eyebrow: string; title: string; intro: string; new
                   <div className="muted" style={{ fontSize: '0.84rem' }}>{r.detail}</div>
                 </td>
                 <td><StatusPill status={r.status} /></td>
-                <td className="num" style={{ whiteSpace: 'nowrap' }}>{formatDate(r.checked)}</td>
+                <td className="num" style={{ whiteSpace: 'nowrap' }}>{r.checked ? formatDate(r.checked) : <span className="pill s-FLAGGED">Not verified</span>}</td>
                 <td className="hide-narrow">
                   {r.status === 'PUBLISHED' ? <a href={r.publicHref} target="_blank" rel="noopener noreferrer">Open</a> : <span className="muted">Not public</span>}
                 </td>
@@ -215,7 +216,8 @@ const slugHint = 'The web address: lowercase latin letters, digits and hyphens, 
 
 // ─── Visa guide form ─────────────────────────────────────────────────────────
 
-const emptyVisa = { slug: '', countryCode: 'UG', coveredCountries: ['UG'], visaType: '', titleRu: '', requirementsRu: '', checklistItems: [] as ChecklistItem[], officialUrl: '', feeInfo: '', processingTime: '', status: 'DRAFT' as ContentStatus };
+const emptyVisa = { slug: '', countryCode: 'UG', coveredCountries: ['UG'], visaType: '', titleRu: '', requirementsRu: '', checklistItems: [] as ChecklistItem[], officialUrl: '', feeInfo: '', processingTime: '', status: 'DRAFT' as ContentStatus, verifiedOn: '', sourceUrl: '' };
+const today = () => new Date().toISOString().slice(0, 10);
 
 export function VisaGuideFormPage() {
   const OPERATOR_COUNTRIES = useActiveCountryCodes();
@@ -228,7 +230,7 @@ export function VisaGuideFormPage() {
   const [verified, setVerified] = useState(false);
   useEffect(() => {
     const g = existing.data;
-    if (g) setV({ ...g, officialUrl: g.officialUrl ?? '', feeInfo: g.feeInfo ?? '', processingTime: g.processingTime ?? '' });
+    if (g) setV({ ...g, officialUrl: g.officialUrl ?? '', feeInfo: g.feeInfo ?? '', processingTime: g.processingTime ?? '', verifiedOn: g.verifiedOn ?? '', sourceUrl: g.sourceUrl ?? '' });
   }, [existing.data]);
 
   const payload = () => ({
@@ -236,6 +238,8 @@ export function VisaGuideFormPage() {
     officialUrl: v.officialUrl.trim() || null,
     feeInfo: v.feeInfo.trim() || null,
     processingTime: v.processingTime.trim() || null,
+    verifiedOn: v.verifiedOn || null,
+    sourceUrl: v.sourceUrl.trim() || null,
     ...(verified && { factsVerified: true }),
   });
   const { errors, setErrors, formError, setFormError, m } = useSave(
@@ -341,7 +345,27 @@ export function VisaGuideFormPage() {
         </fieldset>
       </section>
 
-      <PublishControls id="visa" status={v.status} onStatus={(s) => set('status', s)} verified={verified} onVerified={setVerified} lastChecked={existing.data?.lastUpdated} />
+      <section className="panel">
+        <fieldset>
+          <legend>Fact check</legend>
+          <p className="muted" style={{ fontSize: '0.88rem' }}>
+            Readers see “checked on {'<date>'} · source” only when both are filled in. Otherwise the guide shows a red “not yet verified” notice.
+          </p>
+          <div className="form-grid">
+            <Field id="sourceUrl" label="Source checked" hint="The official page you checked the facts against (often the immigration site)." error={errors.sourceUrl}>
+              <input id="sourceUrl" type="url" value={v.sourceUrl} onChange={(e) => set('sourceUrl', e.target.value)} aria-invalid={!!errors.sourceUrl} />
+            </Field>
+            <Field id="verifiedOn" label="Verified on" error={errors.verifiedOn}>
+              <div className="row-wrap">
+                <input id="verifiedOn" type="date" max={today()} value={v.verifiedOn} onChange={(e) => set('verifiedOn', e.target.value)} aria-invalid={!!errors.verifiedOn} style={{ width: 'auto' }} />
+                <button type="button" className="btn" onClick={() => set('verifiedOn', today())}>Today</button>
+              </div>
+            </Field>
+          </div>
+        </fieldset>
+      </section>
+
+      <PublishControls id="visa" status={v.status} onStatus={(s) => set('status', s)} verified={verified} onVerified={(on) => { setVerified(on); if (on) set('verifiedOn', today()); }} lastChecked={existing.data?.lastUpdated} />
     </FormShell>
   );
 }

@@ -234,6 +234,12 @@ locked out.
 - [ ] Replace the placeholder content: site name, visa guides (still drafts until checked against
       official sources) and insurer details. The site needs a privacy policy before collecting
       travellers' contacts.
+- [ ] For every visa guide and insurer, fill in **Source checked** and **Verified on** after checking the
+      facts. Until both are filled in, the public page shows a red "Ещё не проверено" notice.
+- [ ] Dashboard → **Settings** (super admin): paste your lawyer's wording into the visa and insurance
+      disclaimers. Until then the site shows standard wording that no lawyer has reviewed.
+- [ ] Settings → **Licence copies**: set how long operators' licence copies are kept (ask your lawyer). Files
+      past that period are listed there; nothing is deleted automatically, so check the list monthly.
 - [ ] Set up an uptime monitor (any free service) on `https://admin.example.org/api/health`. It answers 200
       with `"status":"ok"`, the uptime and the database response time, or 503 when the database is down.
       Optional: start with `APP_VERSION=$(git rev-parse --short HEAD) docker compose up -d --build` to see the
@@ -295,6 +301,8 @@ To restore a copy you kept off the server, first copy it into `infra/production/
 ## What was tested
 
 Pilot round (12 October 2026):
+- Content safety (verification notices, disclaimers, document deletion and retention) has automated API and
+  browser tests.
 - `restore-check.sh` passed on a real backup, and failed correctly on a broken file and on an empty
   folder. It is also an automated test.
 - `restore.sh --database-only` restored a damaged database (18 of 18 operators and reviews back), kept the

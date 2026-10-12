@@ -259,6 +259,10 @@ These keep the meaning of the spec's fields but change how they are stored:
 | *(Phase 4, approved 2026-10-10)* `Country` | + `name_ru_in`, `active`, `licensing_authority`, `licence_register_url`, `created_at` | countries are added and switched on by staff instead of being hard-coded; Russian page titles need the locative ("в Уганде") |
 | *(Pilot round, requested 2026-10-12)* new `inquiry_replies` | inquiry, body, author (operator login **or** staff, CHECK at most one), delivered via (Telegram/email), time | operators answer travellers in the portal; staff answers on their behalf are recorded as such; the score uses operator answers only. Earlier staff answers were copied in from the audit log |
 | *(Pilot round, requested 2026-10-12)* new `quote_booking_reports` | quote, side (DMC/operator, one each), outcome (booked/not booked), booked on, agreed net price + currency, travellers, note | both sides say whether a quote became a booking; disagreements are flagged; monthly report for invoicing introduction fees by hand. Display/reporting only, no payment fields. Earlier DMC "close: sold / not sold" outcomes copied in from the audit log |
+| *(Pilot round, requested 2026-10-12)* `VisaGuide` | + `verified_on` (date), `source_url` (http(s), CHECK) | readers see "checked on … · source" only with both; otherwise a "not yet verified" notice. `last_updated` keeps its old meaning (last published / ticked). Existing guides start unverified (no backfill) |
+| *(Pilot round, requested 2026-10-12)* `Insurer` | + `source_url` (http(s), CHECK) | same rule with the existing `verified_at` |
+| *(Pilot round, requested 2026-10-12)* `OperatorDocument` | + `deleted_at`, `deleted_by_id` (CHECK: no deleter without a time) | staff erase licence copies (retention); the row stays so the record shows the document existed, was checked, and who deleted it |
+| *(Pilot round, requested 2026-10-12)* new `site_settings` | key (unique, CHECK on format), value, updated by, updated at | disclaimer wording on the visa and insurance pages and the document retention period, changed by a super admin without a code change; each change is in the audit log (`setting.update`) |
 
 ---
 
@@ -437,4 +441,23 @@ Small round before a pilot with 5–10 operators and 2–3 DMCs. Still no paymen
 - **Restore:** `infra/production/restore-check.sh` (a drill into a scratch database, automated test) and
   `restore.sh` (real restore: drill first, safety copy, stop, restore database and documents, start, wait for
   health; requires `--yes`).
+
+### 4. Content safety before launch
+
+- **Verified on + source.** Visa guides and insurers carry a "verified on" date and a source link. The public
+  API returns `verified: true` only when both are set; the site then shows "Проверено <date> · источник".
+  Otherwise the guide page, the visa list and the insurance table show a red **"Ещё не проверено"** notice
+  (decision: records stay publishable with the notice rather than being hidden). Ticking "I checked these facts
+  today" records today; an explicit day can be entered; future days and non-web links are refused. Seed: two
+  visa guides and two insurers verified, the rest show the notice.
+- **Disclaimers.** A standing "Важно" block on every visa guide page and on the insurance page. The wording
+  comes from `site_settings` (`/public/disclaimers`), with plain default wording that is **not legal advice**
+  and is labelled in the dashboard as "not reviewed by a lawyer". A super admin pastes a lawyer's text in
+  dashboard → Settings; the pages refresh through the `guides` cache tag.
+- **Document retention.** Settings → "Licence copies": a super admin sets how many days after upload a licence
+  or registration copy may be kept (30–3650, or no limit). Files older than that are listed for moderators.
+  Nothing is deleted automatically. A moderator deletes one file from the operator page (reason required),
+  or a super admin deletes all listed files at once. Deleting erases the encrypted file, keeps the row
+  (`deleted_at`, who), and writes `operator.document_delete` with the reason into the operator's history. A
+  deleted file can't be opened (410) and no longer counts towards an application.
 

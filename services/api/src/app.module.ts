@@ -19,6 +19,7 @@ import { NotificationsModule } from './mail/notifications.service';
 import { StorageModule } from './storage/document-store';
 import { OperatorsModule } from './operators/operators.module';
 import { ReviewsModule } from './reviews/reviews.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ReviewsModule } from './reviews/reviews.module';
     ScoringModule,
     PortalModule,
     FeedModule,
+    SettingsModule,
     BookingsModule,
   ],
   controllers: [HealthController],

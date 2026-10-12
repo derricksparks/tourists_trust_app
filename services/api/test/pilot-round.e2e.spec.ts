@@ -5,7 +5,11 @@ import request from 'supertest';
 import { PrismaService } from '../src/common/prisma.service';
 import { Mail, MailService } from '../src/mail/mail.service';
 import { ScoringService } from '../src/scoring/scoring.service';
+import { DocumentStore } from '../src/storage/document-store';
 import { signInitData } from '../src/telegram/init-data';
+import { mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { startFakeTelegram } from './fake-telegram';
 import { createAdmin, createApp, PASSWORD, resetDb, tokenFor, validOperator } from './helpers';
 
@@ -19,6 +23,7 @@ let modToken: string;
 
 beforeAll(async () => {
   process.env.TELEGRAM_BOT_TOKEN = BOT_TOKEN;
+  process.env.UPLOAD_DIR = mkdtempSync(join(tmpdir(), 'ttp-pilot-uploads-'));
   process.env.PORTAL_URL = 'https://portal.example';
   process.env.ADMIN_URL = 'https://admin.example';
   process.env.STAFF_EMAILS = 'ops@platform.example';
@@ -342,5 +347,154 @@ describe('restore drill (infra/production/restore-check.sh)', () => {
     const bad = spawnSync('sh', [script], { env: { ...pgEnv, BACKUP_DIR: dir }, encoding: 'utf8' });
     expect(bad.status).not.toBe(0);
     expect(bad.stderr).toContain('FAIL: not a readable pg_dump archive');
+  });
+});
+
+describe('content safety: verified on, source, disclaimers', () => {
+  let editor: string;
+  let superAdmin: string;
+  beforeEach(async () => {
+    editor = await tokenFor(app, (await createAdmin(prisma, 'CONTENT_EDITOR')).email);
+    superAdmin = await tokenFor(app, (await createAdmin(prisma, 'SUPER_ADMIN')).email);
+  });
+  const guide = { slug: 'kenya-eta', countryCode: 'KE', coveredCountries: ['KE'], visaType: 'eTA', titleRu: 'eTA в Кению', requirementsRu: 'Подайте онлайн.', status: 'PUBLISHED' };
+
+  it('a visa guide counts as verified only with both a date and a source', async () => {
+    const created = await bearer(http().post('/admin/visa-guides'), editor).send(guide).expect(201);
+    let pub = await http().get('/public/visa-guides/kenya-eta').expect(200);
+    expect(pub.body).toMatchObject({ verified: false, verifiedOn: null, sourceUrl: null });
+
+    await bearer(http().patch(`/admin/visa-guides/${created.body.id}`), editor).send({ verifiedOn: '2026-09-28' }).expect(200);
+    pub = await http().get('/public/visa-guides/kenya-eta').expect(200);
+    expect(pub.body).toMatchObject({ verified: false, verifiedOn: '2026-09-28' });
+
+    await bearer(http().patch(`/admin/visa-guides/${created.body.id}`), editor).send({ sourceUrl: 'https://www.etakenya.go.ke/requirements' }).expect(200);
+    pub = await http().get('/public/visa-guides/kenya-eta').expect(200);
+    expect(pub.body).toMatchObject({ verified: true, verifiedOn: '2026-09-28', sourceUrl: 'https://www.etakenya.go.ke/requirements' });
+    expect((await http().get('/public/visa-guides').expect(200)).body[0].verified).toBe(true);
+
+    // Ticking "facts verified" records today; a future day or a non-web source is refused.
+    await bearer(http().patch(`/admin/visa-guides/${created.body.id}`), editor).send({ factsVerified: true }).expect(200);
+    expect((await http().get('/public/visa-guides/kenya-eta')).body.verifiedOn).toBe(new Date().toISOString().slice(0, 10));
+    await bearer(http().patch(`/admin/visa-guides/${created.body.id}`), editor).send({ verifiedOn: '2099-01-01' }).expect(400);
+    await bearer(http().patch(`/admin/visa-guides/${created.body.id}`), editor).send({ sourceUrl: 'ftp://example.com/x' }).expect(400);
+    // Clearing the source puts the notice back.
+    await bearer(http().patch(`/admin/visa-guides/${created.body.id}`), editor).send({ sourceUrl: null }).expect(200);
+    expect((await http().get('/public/visa-guides/kenya-eta')).body.verified).toBe(false);
+  });
+
+  it('an insurer counts as verified only with both a date and a source', async () => {
+    const base = { name: 'Demo Insurer', countriesCovered: ['UG'], claimsContact: '+7 000 (demo)', published: true };
+    const created = await bearer(http().post('/admin/insurers'), editor).send({ ...base, factsVerified: true }).expect(201);
+    let pub = await http().get('/public/insurers').expect(200);
+    expect(pub.body[0]).toMatchObject({ verified: false, sourceUrl: null });
+    expect(pub.body[0].verifiedAt).not.toBeNull();
+
+    await bearer(http().patch(`/admin/insurers/${created.body.id}`), editor).send({ sourceUrl: 'https://insurer.example/terms', verifiedOn: '2026-09-01' }).expect(200);
+    pub = await http().get('/public/insurers').expect(200);
+    expect(pub.body[0]).toMatchObject({ verified: true, sourceUrl: 'https://insurer.example/terms', verifiedAt: '2026-09-01T00:00:00.000Z' });
+
+    await bearer(http().patch(`/admin/insurers/${created.body.id}`), editor).send({ verifiedOn: null }).expect(200);
+    pub = await http().get('/public/insurers').expect(200);
+    expect(pub.body[0]).toMatchObject({ verified: false, verifiedAt: null });
+  });
+
+  it('disclaimers have standard wording until a super admin replaces it; the change is recorded', async () => {
+    const before = await http().get('/public/disclaimers').expect(200);
+    expect(before.body.visa).toContain('справочный');
+    expect(before.body.insurance).toContain('договор страхования');
+
+    const lawyer = 'Текст юриста для визовых страниц (демо). Проверьте требования на официальном сайте.';
+    await bearer(http().put('/admin/settings'), editor).send({ disclaimerVisa: lawyer }).expect(403);
+    await asMod(http().put('/admin/settings')).send({ disclaimerVisa: lawyer }).expect(403);
+    await bearer(http().put('/admin/settings'), superAdmin).send({ disclaimerVisa: 'short' }).expect(400);
+    const saved = await bearer(http().put('/admin/settings'), superAdmin).send({ disclaimerVisa: lawyer }).expect(200);
+    expect(saved.body).toMatchObject({ disclaimerVisa: lawyer, disclaimerVisaIsDefault: false, disclaimerInsuranceIsDefault: true });
+    expect(saved.body.updated[0]).toMatchObject({ key: 'disclaimer.visa', by: 'Test SUPER_ADMIN' });
+
+    const after = await http().get('/public/disclaimers').expect(200);
+    expect(after.body.visa).toBe(lawyer);
+    expect(after.body.insurance).toBe(before.body.insurance);
+    const audit = await prisma.auditLog.findFirstOrThrow({ where: { action: 'setting.update' } });
+    expect(audit.metadata).toMatchObject({ key: 'disclaimer.visa', after: lawyer });
+    // Any staff member can read the settings.
+    expect((await bearer(http().get('/admin/settings'), editor).expect(200)).body.disclaimerVisa).toBe(lawyer);
+  });
+});
+
+describe('document retention', () => {
+  let superAdmin: string;
+  let store: DocumentStore;
+  beforeEach(async () => {
+    superAdmin = await tokenFor(app, (await createAdmin(prisma, 'SUPER_ADMIN')).email);
+    store = app.get(DocumentStore);
+  });
+  const addDoc = async (operatorId: string, daysAgo: number, type: 'TOURISM_LICENSE' | 'BUSINESS_REGISTRATION' = 'TOURISM_LICENSE') =>
+    prisma.operatorDocument.create({
+      data: {
+        operatorId, type, storageKey: await store.put(`documents/${operatorId}`, Buffer.from('%PDF-1.4 demo')), originalFilename: 'licence.pdf', contentType: 'application/pdf', sizeBytes: 13,
+        createdAt: new Date(Date.now() - daysAgo * 86_400_000), reviewedAt: new Date(), reviewNotes: 'Matches the register',
+      },
+    });
+
+  it('a super admin sets the period; files past it are listed; nothing is listed without a period', async () => {
+    const { op } = await operatorWithLogin();
+    const old = await addDoc(op.id, 400);
+    await addDoc(op.id, 10, 'BUSINESS_REGISTRATION');
+    expect((await asMod(http().get('/admin/documents/retention')).expect(200)).body).toEqual({ retentionDays: null, documents: [] });
+
+    await asMod(http().put('/admin/settings')).send({ documentRetentionDays: 365 }).expect(403);
+    await bearer(http().put('/admin/settings'), superAdmin).send({ documentRetentionDays: 5 }).expect(400);
+    await bearer(http().put('/admin/settings'), superAdmin).send({ documentRetentionDays: 365 }).expect(200);
+    const due = await asMod(http().get('/admin/documents/retention')).expect(200);
+    expect(due.body.retentionDays).toBe(365);
+    expect(due.body.documents.map((d: { id: string }) => d.id)).toEqual([old.id]);
+    expect(due.body.documents[0].operator).toMatchObject({ id: op.id, name: 'Alpha Safaris' });
+
+    // Back to "keep until deleted by hand".
+    const cleared = await bearer(http().put('/admin/settings'), superAdmin).send({ documentRetentionDays: null }).expect(200);
+    expect(cleared.body.documentRetentionDays).toBeNull();
+    expect((await asMod(http().get('/admin/documents/retention'))).body.documents).toEqual([]);
+  });
+
+  it('staff delete a licence copy: the file is erased, the record stays, and the history says who and why', async () => {
+    const { op, token } = await operatorWithLogin();
+    const doc = await addDoc(op.id, 30);
+    const editor = await tokenFor(app, (await createAdmin(prisma, 'CONTENT_EDITOR')).email);
+    await bearer(http().delete(`/admin/operators/${op.id}/documents/${doc.id}`), editor).send({ reason: 'Retention' }).expect(403);
+    await asMod(http().delete(`/admin/operators/${op.id}/documents/${doc.id}`)).send({}).expect(400);
+
+    const res = await asMod(http().delete(`/admin/operators/${op.id}/documents/${doc.id}`)).send({ reason: 'Operator asked us to remove it' }).expect(200);
+    expect(res.body.deletedAt).not.toBeNull();
+    expect(res.body.deletedBy.name).toBe('Test MODERATOR');
+    expect(await store.get(doc.storageKey)).toBeNull();
+
+    const detail = await asMod(http().get(`/admin/operators/${op.id}`)).expect(200);
+    expect(detail.body.documents[0]).toMatchObject({ id: doc.id, reviewNotes: 'Matches the register' });
+    expect(detail.body.history[0]).toMatchObject({ action: 'operator.document_delete', reason: 'Operator asked us to remove it' });
+    expect(detail.body.history[0].metadata).toMatchObject({ documentId: doc.id, type: 'TOURISM_LICENSE' });
+
+    await asMod(http().get(`/admin/operators/${op.id}/documents/${doc.id}/file`)).expect(410);
+    await asMod(http().delete(`/admin/operators/${op.id}/documents/${doc.id}`)).send({ reason: 'again' }).expect(410);
+    // The operator no longer sees it, and can't open it.
+    expect((await bearer(http().get('/portal/operator/application'), token).expect(200)).body.documents).toEqual([]);
+    await bearer(http().get(`/portal/operator/documents/${doc.id}/file`), token).expect(404);
+  });
+
+  it('a super admin deletes everything past the period at once; each deletion is recorded', async () => {
+    const { op } = await operatorWithLogin();
+    const a = await addDoc(op.id, 800);
+    const b = await addDoc(op.id, 760, 'BUSINESS_REGISTRATION');
+    const keep = await addDoc(op.id, 100);
+    await bearer(http().put('/admin/settings'), superAdmin).send({ documentRetentionDays: 730 }).expect(200);
+    await asMod(http().post('/admin/documents/retention/purge')).expect(403);
+    expect((await bearer(http().post('/admin/documents/retention/purge'), superAdmin).expect(200)).body).toEqual({ deleted: 2 });
+    const rows = await prisma.operatorDocument.findMany({ where: { operatorId: op.id }, orderBy: { createdAt: 'asc' } });
+    expect(rows.map((r) => [r.id, !!r.deletedAt])).toEqual([[a.id, true], [b.id, true], [keep.id, false]]);
+    expect(await store.get(keep.storageKey)).not.toBeNull();
+    const audits = await prisma.auditLog.findMany({ where: { action: 'operator.document_delete' } });
+    expect(audits).toHaveLength(2);
+    expect(audits[0].metadata).toMatchObject({ retentionDays: 730 });
+    expect((await asMod(http().get('/admin/documents/retention'))).body.documents).toEqual([]);
   });
 });

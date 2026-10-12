@@ -43,6 +43,17 @@ function mapError(what: string) {
 const stamp = (input: { status?: string; factsVerified?: boolean }) =>
   input.factsVerified || input.status === 'PUBLISHED' ? { lastUpdated: new Date() } : {};
 
+/**
+ * "Verified on" for visa guides (pilot round): an explicit day wins; ticking "facts verified"
+ * without one records today. null clears it.
+ */
+const verifiedOnData = (input: { factsVerified?: boolean; verifiedOn?: string | null }) =>
+  input.verifiedOn !== undefined
+    ? { verifiedOn: input.verifiedOn ? new Date(`${input.verifiedOn}T00:00:00Z`) : null }
+    : input.factsVerified
+      ? { verifiedOn: new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`) }
+      : {};
+
 /** Visa guides (VI-1, VI-2) and destination / logistics guides (FL-1), edited by content editors. */
 @Controller('admin')
 @UseGuards(AdminAuthGuard)
@@ -67,9 +78,9 @@ export class AdminContentController {
   @Post('visa-guides')
   @AdminRoles('SUPER_ADMIN', 'CONTENT_EDITOR')
   async createVisaGuide(@Body(new ZodValidationPipe(visaGuideCreateSchema)) body: VisaGuideCreateInput, @CurrentAdmin() admin: AdminUser) {
-    const { factsVerified, checklistItems, ...data } = body;
+    const { factsVerified, checklistItems, verifiedOn, ...data } = body;
     const g = await this.prisma.visaGuide
-      .create({ data: { ...data, checklistItems, ...stamp(body) } })
+      .create({ data: { ...data, checklistItems, ...stamp(body), ...verifiedOnData(body) } })
       .catch(mapError('Visa guide'));
     await this.audit(admin, 'visa_guide.create', 'visa_guide', g.id, { status: g.status, factsVerified });
     return g;
@@ -82,9 +93,9 @@ export class AdminContentController {
     @Body(new ZodValidationPipe(visaGuideUpdateSchema)) body: VisaGuideUpdateInput,
     @CurrentAdmin() admin: AdminUser,
   ) {
-    const { factsVerified, ...data } = body;
-    const g = await this.prisma.visaGuide.update({ where: { id }, data: { ...data, ...stamp(body) } }).catch(mapError('Visa guide'));
-    await this.audit(admin, 'visa_guide.update', 'visa_guide', id, { fields: Object.keys(data), factsVerified });
+    const { factsVerified, verifiedOn, ...data } = body;
+    const g = await this.prisma.visaGuide.update({ where: { id }, data: { ...data, ...stamp(body), ...verifiedOnData(body) } }).catch(mapError('Visa guide'));
+    await this.audit(admin, 'visa_guide.update', 'visa_guide', id, { fields: Object.keys(data), factsVerified, ...(verifiedOn !== undefined && { verifiedOn }) });
     return g;
   }
 

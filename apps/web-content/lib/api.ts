@@ -1,6 +1,7 @@
 import type {
   PublicCountry,
   PublicDestinationGuide,
+  PublicDisclaimers,
   PublicInsurer,
   PublicPackageDetail,
   PublicOperatorDetail,
@@ -43,6 +44,7 @@ export const publicApi = {
   translators: (p: { country?: string; specialty?: string } = {}) => get<PublicTranslator[]>(`/translators${qs(p)}`, 'translators'),
   translator: (id: string) => get<PublicTranslator>(`/translators/${encodeURIComponent(id)}`, 'translators'),
   insurers: () => get<PublicInsurer[]>('/insurers', 'guides'),
+  disclaimers: () => get<PublicDisclaimers>('/disclaimers', 'guides'),
   package: (slug: string) => get<PublicPackageDetail>(`/packages/${encodeURIComponent(slug)}`, 'operators'),
 };
 

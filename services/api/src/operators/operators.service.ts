@@ -67,7 +67,7 @@ export class OperatorsService {
   async get(id: string) {
     const operator = await this.prisma.operator.findUnique({
       where: { id },
-      include: { country: true, documents: true, media: true },
+      include: { country: true, documents: { include: { deletedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } }, media: true },
     });
     if (!operator) throw new NotFoundException('Operator not found');
     const history = await this.prisma.auditLog.findMany({

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { publicApi } from '@/lib/api';
-import { countryRu, dateRu } from '@/lib/format';
+import { Disclaimer } from '@/components/Disclaimer';
+import { Verification } from '@/components/Verification';
+import { countryRu } from '@/lib/format';
 import { loadCountries } from '@/lib/countries';
 
 export const metadata: Metadata = {
@@ -42,7 +44,9 @@ export default async function InsurancePage() {
                 <tr key={i.id}>
                   <th scope="row">
                     {i.websiteUrl ? <a href={i.websiteUrl} rel="noopener noreferrer" target="_blank">{i.nameRu ?? i.name}</a> : (i.nameRu ?? i.name)}
-                    {i.verifiedAt && <div className="muted small">проверено {dateRu(i.verifiedAt)}</div>}
+                    <div className="small">
+                      <Verification verifiedOn={i.verifiedAt} sourceUrl={i.sourceUrl} compact />
+                    </div>
                   </th>
                   <td>{i.countriesCovered.map(countryRu).join(', ')}</td>
                   <td>{i.repatriationConfirmed ? <span className="yes">✓ подтверждена</span> : <span className="muted">не подтверждена</span>}</td>
@@ -60,6 +64,7 @@ export default async function InsurancePage() {
         Перед покупкой проверьте, что в полис включены нужные страны, сафари и активности (например, восхождение на Килиманджаро). Условия
         меняются — сверяйтесь с договором.
       </p>
+      <Disclaimer kind="insurance" />
     </div>
   );
 }

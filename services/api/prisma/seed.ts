@@ -170,17 +170,21 @@ async function main() {
 
   // Real (tiny, fictional) PDFs, encrypted into UPLOAD_DIR like uploads, so "Open" works in the dashboard.
   const store = new DocumentStore();
-  const demoDoc = async (operatorId: string, name: string, type: 'TOURISM_LICENSE' | 'BUSINESS_REGISTRATION', reviewed?: string) => {
+  const demoDoc = async (operatorId: string, name: string, type: 'TOURISM_LICENSE' | 'BUSINESS_REGISTRATION', reviewed?: string, uploadedAt?: Date) => {
     const pdf = demoPdf(`${type === 'TOURISM_LICENSE' ? 'Tourism licence' : 'Business registration'} - ${name} - FICTIONAL DEMO DOCUMENT`);
     await prisma.operatorDocument.create({
       data: {
         operatorId, type, storageKey: await store.put(`documents/${operatorId}`, pdf), originalFilename: `${type === 'TOURISM_LICENSE' ? 'licence' : 'registration'}-demo.pdf`,
         contentType: 'application/pdf', sizeBytes: pdf.length,
-        ...(reviewed && { reviewedById: moderator.id, reviewedAt: approvedAt, reviewNotes: reviewed }),
+        ...(reviewed && { reviewedById: moderator.id, reviewedAt: uploadedAt ?? approvedAt, reviewNotes: reviewed }),
+        ...(uploadedAt && { createdAt: uploadedAt }),
       },
     });
   };
   await demoDoc(pearl.id, 'Pearl Gorilla Treks', 'TOURISM_LICENSE', 'Matches UTB registry (demo).');
+  // Pilot round: last year's licence copy, past the demo retention period (Settings → Licence copies).
+  await demoDoc(pearl.id, 'Pearl Gorilla Treks 2024', 'TOURISM_LICENSE', 'Previous licence, matched UTB registry (demo).', new Date('2024-07-01T00:00:00Z'));
+  await prisma.siteSetting.create({ data: { key: 'documents.retention_days', value: '730', updatedById: admin.id } });
   for (const o of await prisma.operator.findMany({ where: { status: { in: ['PENDING', 'FLAGGED'] } } })) {
     await demoDoc(o.id, o.name, 'TOURISM_LICENSE');
     await demoDoc(o.id, o.name, 'BUSINESS_REGISTRATION');
@@ -308,12 +312,12 @@ async function main() {
   await prisma.insurer.createMany({
     data: [
       { name: 'Demo Strakhovanie A', nameRu: 'Демо Страхование А', websiteUrl: 'https://insurer-a.example.com', countriesCovered: ['UG', 'TZ', 'KE'], claimsContact: '+7 000 000-00-00 (demo)', repatriationConfirmed: true,
-        coverageRu: 'Медицинские расходы, эвакуация, репатриация (демо)', exclusionsRu: 'Альпинизм выше 5000 м (демо)', medicalLimitInfo: 'до 50 000 € (демо)', verifiedAt: new Date('2026-09-01T00:00:00Z'), verifiedById: admin.id, published: true },
+        coverageRu: 'Медицинские расходы, эвакуация, репатриация (демо)', exclusionsRu: 'Альпинизм выше 5000 м (демо)', medicalLimitInfo: 'до 50 000 € (демо)', verifiedAt: new Date('2026-09-01T00:00:00Z'), verifiedById: admin.id, sourceUrl: 'https://insurer-a.example.com/terms', published: true },
       { name: 'Demo Strakhovanie B', nameRu: 'Демо Страхование Б', countriesCovered: ['KE'], claimsContact: 'claims@insurer-b.example.com', repatriationConfirmed: false,
         coverageRu: 'Только медицинские расходы (демо)', notes: 'Repatriation not yet confirmed by phone.' },
       { name: 'Demo Strakhovanie C', nameRu: 'Демо Страхование В', websiteUrl: 'https://insurer-c.example.com', countriesCovered: ['UG', 'TZ', 'KE', 'RW'], claimsContact: '+7 000 111-11-11 (demo)', repatriationConfirmed: true,
         coverageRu: 'Медицина, эвакуация вертолётом, репатриация, задержка рейса (демо)', exclusionsRu: 'Дайвинг глубже 30 м; восхождение на Килиманджаро — только с доп. опцией (демо)', medicalLimitInfo: 'до 100 000 € (демо)',
-        verifiedAt: new Date('2026-09-20T00:00:00Z'), verifiedById: admin.id, published: true },
+        verifiedAt: new Date('2026-09-20T00:00:00Z'), verifiedById: admin.id, sourceUrl: 'https://insurer-c.example.com/africa', published: true },
       { name: 'Demo Strakhovanie D', nameRu: 'Демо Страхование Г', countriesCovered: ['TZ'], claimsContact: '+7 000 222-22-22 (demo)', repatriationConfirmed: false,
         coverageRu: 'Медицинские расходы (демо)', exclusionsRu: 'Нет покрытия на Занзибаре (демо)', medicalLimitInfo: 'до 30 000 € (демо)', verifiedAt: new Date('2026-08-15T00:00:00Z'), verifiedById: admin.id, published: true },
     ],
@@ -339,9 +343,9 @@ async function main() {
     { key: 'return_ticket', labelRu: 'Обратный билет', required: true },
     { key: 'yellow_fever', labelRu: 'Сертификат о прививке от жёлтой лихорадки', required: false },
   ];
-  const ugVisa = await prisma.visaGuide.create({ data: { slug: 'uganda-evisa', status: 'PUBLISHED', countryCode: 'UG', coveredCountries: ['UG'], visaType: 'eVisa', titleRu: 'Электронная виза в Уганду', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://visas.immigration.go.ug' } });
+  const ugVisa = await prisma.visaGuide.create({ data: { slug: 'uganda-evisa', status: 'PUBLISHED', countryCode: 'UG', coveredCountries: ['UG'], visaType: 'eVisa', titleRu: 'Электронная виза в Уганду', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://visas.immigration.go.ug', verifiedOn: new Date('2026-09-15T00:00:00Z'), sourceUrl: 'https://visas.immigration.go.ug' } });
   await prisma.visaGuide.create({ data: { slug: 'tanzania-zanzibar-evisa', status: 'PUBLISHED', countryCode: 'TZ', coveredCountries: ['TZ'], visaType: 'eVisa', titleRu: 'Электронная виза в Танзанию и на Занзибар', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://visa.immigration.go.tz' } });
-  await prisma.visaGuide.create({ data: { slug: 'kenya-eta', status: 'PUBLISHED', countryCode: 'KE', coveredCountries: ['KE'], visaType: 'eTA', titleRu: 'Электронное разрешение на въезд (eTA) в Кению', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://www.etakenya.go.ke' } });
+  await prisma.visaGuide.create({ data: { slug: 'kenya-eta', status: 'PUBLISHED', countryCode: 'KE', coveredCountries: ['KE'], visaType: 'eTA', titleRu: 'Электронное разрешение на въезд (eTA) в Кению', requirementsRu: placeholder, checklistItems: checklist, officialUrl: 'https://www.etakenya.go.ke', verifiedOn: new Date('2026-09-28T00:00:00Z'), sourceUrl: 'https://www.etakenya.go.ke' } });
   await prisma.visaGuide.create({ data: { slug: 'east-african-tourist-visa', status: 'PUBLISHED', countryCode: 'KE', coveredCountries: ['KE', 'UG', 'RW'], visaType: 'East African Tourist Visa', titleRu: 'Восточноафриканская туристическая виза (Кения, Уганда, Руанда — без Танзании)', requirementsRu: placeholder, checklistItems: checklist } });
   await prisma.visaApplication.create({ data: { telegramUserId: tourist.id, visaGuideId: ugVisa.id, status: 'GATHERING_DOCUMENTS', travelDate: day('2027-02-14'), checkedItems: ['passport'] } });
 

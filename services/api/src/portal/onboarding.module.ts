@@ -5,6 +5,7 @@ import {
   Controller,
   Delete,
   ForbiddenException,
+  GoneException,
   Get,
   HttpCode,
   HttpException,
@@ -142,7 +143,7 @@ export class OnboardingController {
   async application(@CurrentAccount() a: PortalAccount) {
     const op = await this.prisma.operator.findUniqueOrThrow({
       where: { id: operatorOf(a).id },
-      include: { country: true, documents: { select: documentSelect, orderBy: { createdAt: 'asc' } } },
+      include: { country: true, documents: { where: { deletedAt: null }, select: documentSelect, orderBy: { createdAt: 'asc' } } },
     });
     const { badgeToken, approvedById, ...rest } = op;
     return {
@@ -174,7 +175,7 @@ export class OnboardingController {
   @UseGuards(PortalAuthGuard)
   @PortalRoles('OPERATOR')
   async submit(@CurrentAccount() a: PortalAccount) {
-    const op = await this.prisma.operator.findUniqueOrThrow({ where: { id: operatorOf(a).id }, include: { documents: { select: { type: true } } } });
+    const op = await this.prisma.operator.findUniqueOrThrow({ where: { id: operatorOf(a).id }, include: { documents: { where: { deletedAt: null }, select: { type: true } } } });
     const missing = applicationMissing(op, op.documents.map((d) => d.type));
     if (missing.length) throw new BadRequestException(`Still missing: ${missing.map((m) => m.label).join('; ')}`);
     const { count } = await this.prisma.operator.updateMany({
@@ -199,7 +200,7 @@ export class OnboardingController {
     if (!file?.size) throw new BadRequestException('Choose a file to upload');
     const contentType = sniffDocumentType(file.buffer);
     if (!contentType) throw new BadRequestException('Upload a PDF, JPEG or PNG file');
-    if ((await this.prisma.operatorDocument.count({ where: { operatorId: op.id } })) >= DOCUMENTS_PER_OPERATOR) {
+    if ((await this.prisma.operatorDocument.count({ where: { operatorId: op.id, deletedAt: null } })) >= DOCUMENTS_PER_OPERATOR) {
       throw new ConflictException(`At most ${DOCUMENTS_PER_OPERATOR} documents; remove one first`);
     }
     const storageKey = await this.store.put(`documents/${op.id}`, file.buffer);
@@ -217,7 +218,7 @@ export class OnboardingController {
   async removeDocument(@Param('id', ParseUUIDPipe) id: string, @CurrentAccount() a: PortalAccount) {
     const op = operatorOf(a);
     if (!(EDITABLE as readonly string[]).includes(op.status)) throw new ConflictException('Documents can only be removed from a draft or flagged application.');
-    const doc = await this.prisma.operatorDocument.findFirst({ where: { id, operatorId: op.id } });
+    const doc = await this.prisma.operatorDocument.findFirst({ where: { id, operatorId: op.id, deletedAt: null } });
     if (!doc) throw new NotFoundException('Document not found');
     if (doc.reviewedAt) throw new ConflictException('This document has been checked by our team, so it stays on file.');
     await this.prisma.operatorDocument.delete({ where: { id } });
@@ -229,7 +230,7 @@ export class OnboardingController {
   @UseGuards(PortalAuthGuard)
   @PortalRoles('OPERATOR')
   async ownFile(@Param('id', ParseUUIDPipe) id: string, @CurrentAccount() a: PortalAccount, @Res() res: Response) {
-    const doc = await this.prisma.operatorDocument.findFirst({ where: { id, operatorId: operatorOf(a).id } });
+    const doc = await this.prisma.operatorDocument.findFirst({ where: { id, operatorId: operatorOf(a).id, deletedAt: null } });
     if (!doc) throw new NotFoundException('Document not found');
     await sendFile(res, this.store, doc);
   }
@@ -249,6 +250,7 @@ export class AdminDocumentsController {
   async file(@Param('operatorId', ParseUUIDPipe) operatorId: string, @Param('id', ParseUUIDPipe) id: string, @CurrentAdmin() admin: AdminUser, @Res() res: Response) {
     const doc = await this.prisma.operatorDocument.findFirst({ where: { id, operatorId } });
     if (!doc) throw new NotFoundException('Document not found');
+    if (doc.deletedAt) throw new GoneException('This document was deleted under the retention policy');
     // Who looked at which licence is part of the record (B3.5: sensitive documents).
     await this.prisma.auditLog.create({ data: { actorAdminId: admin.id, action: 'operator.document_view', entityType: 'operator', entityId: operatorId, metadata: { documentId: id } } });
     await sendFile(res, this.store, doc);

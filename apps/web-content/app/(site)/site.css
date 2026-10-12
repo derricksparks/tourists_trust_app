@@ -157,3 +157,9 @@ table.compare { border-collapse: collapse; width: 100%; min-width: 860px; font-s
 .rating-row { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; }
 .rating-row .label { min-width: 120px; color: var(--muted); }
 .error { color: var(--danger); font-size: 0.9rem; }
+
+/* Content safety (pilot round): verification line and standing disclaimer. */
+.checked { font-size: 0.9rem; color: var(--muted); }
+.unverified { display: inline-block; font-size: 0.86rem; font-weight: 600; color: var(--danger); background: var(--danger-soft); padding: 3px 10px; border-radius: 6px; }
+.disclaimer { display: grid; gap: 8px; padding: 14px 18px; border: 1px solid var(--line); border-left: 4px solid var(--ochre); border-radius: 10px; background: var(--surface); font-size: 0.9rem; color: var(--muted); max-width: 80ch; }
+.disclaimer strong { color: var(--ink); }

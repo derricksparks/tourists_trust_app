@@ -279,3 +279,29 @@ test('staff see confirmed bookings by month and export them as CSV', async ({ pa
   expect(text).toContain('month,booked_on,operator,dmc,tour,travellers,agreed_net_price,currency,quote_id');
   expect(text).toContain('Солнечный Путь (demo)');
 });
+
+test('a super admin replaces the visa disclaimer with a lawyer’s wording', async ({ page, request }) => {
+  await signIn(page, 'admin@example.com');
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByText('Standard wording, not reviewed by a lawyer.').first()).toBeVisible();
+  const text = 'Текст юриста (e2e): сведения о визах носят справочный характер.';
+  await page.getByLabel('Visa pages (Russian)').fill(text);
+  await page.getByRole('button', { name: 'Save disclaimers' }).click();
+  await expect(page.getByText('Saved. The public pages update within a minute.')).toBeVisible();
+  const pub = await (await request.get(`${process.env.API_URL ?? 'http://localhost:3000'}/public/disclaimers`)).json();
+  expect(pub.visa).toBe(text);
+});
+
+test('a moderator deletes a licence copy past the retention period, and it is recorded', async ({ page }) => {
+  await signIn(page, 'moderator@example.com');
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByLabel('Keep for')).toHaveAttribute('readonly', '');
+  const due = page.getByRole('row', { name: /Pearl Gorilla Treks/ });
+  await expect(due).toContainText('1 Jul 2024');
+  await due.getByRole('link', { name: /Pearl Gorilla Treks/ }).click();
+  await page.getByRole('button', { name: 'Delete licence-demo.pdf' }).first().click();
+  await page.getByLabel('Why delete licence-demo.pdf').fill('Retention period passed (e2e)');
+  await page.getByRole('button', { name: 'Delete file' }).click();
+  await expect(page.getByText(/File deleted .* by /)).toBeVisible();
+  await expect(page.locator('ol.history')).toContainText('Retention period passed (e2e)');
+});

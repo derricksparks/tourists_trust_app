@@ -286,6 +286,11 @@ export interface PublicVisaGuide {
   feeInfo: string | null;
   processingTime: string | null;
   lastUpdated: string;
+  /** YYYY-MM-DD; null until an editor records when the facts were checked. */
+  verifiedOn: string | null;
+  sourceUrl: string | null;
+  /** Both of the above are set; otherwise the site shows a "not yet verified" notice. */
+  verified: boolean;
 }
 
 export const GUIDE_KINDS = ['DESTINATION', 'LOGISTICS'] as const;
@@ -352,6 +357,16 @@ export const checklistItemSchema = z.object({
   required: z.boolean(),
 });
 
+/** "Verified on": a past (or today's) date, YYYY-MM-DD. A day of slack for time zones. */
+const verifiedOnSchema = z
+  .string()
+  .date()
+  .refine((d) => d <= new Date(Date.now() + 86_400_000).toISOString().slice(0, 10), 'Cannot be in the future');
+const sourceUrlSchema = z.string().trim().url().regex(/^https?:\/\//i, 'Use an http(s) link');
+
+/** Content safety (pilot round): a visa guide or insurer counts as verified only with both a date and a source. */
+export const isVerified = (r: { verifiedOn: string | null; sourceUrl: string | null }) => !!r.verifiedOn && !!r.sourceUrl;
+
 export const visaGuideCreateSchema = z.object({
   slug,
   countryCode,
@@ -364,8 +379,11 @@ export const visaGuideCreateSchema = z.object({
   feeInfo: z.string().trim().min(1).nullable().optional(),
   processingTime: z.string().trim().min(1).nullable().optional(),
   status: z.enum(CONTENT_STATUSES).default('DRAFT'),
-  /** Tick when the facts were re-checked against the official source; bumps last_updated. */
+  /** Tick when the facts were re-checked against the official source; bumps last_updated (and verified_on, if not given). */
   factsVerified: z.boolean().optional(),
+  /** Day the facts were checked against sourceUrl. Without both, readers see "not yet verified". */
+  verifiedOn: verifiedOnSchema.nullable().optional(),
+  sourceUrl: sourceUrlSchema.nullable().optional(),
 });
 export type VisaGuideCreateInput = z.infer<typeof visaGuideCreateSchema>;
 export const visaGuideUpdateSchema = visaGuideCreateSchema.partial().omit({ checklistItems: true }).extend({
@@ -510,6 +528,9 @@ export const insurerCreateSchema = z.object({
   published: z.boolean().default(false),
   /** Tick after confirming claims and repatriation capability by direct contact; stamps verified_at. */
   factsVerified: z.boolean().optional(),
+  /** Or give the day it was checked; sets verified_at to that day. */
+  verifiedOn: verifiedOnSchema.nullable().optional(),
+  sourceUrl: sourceUrlSchema.nullable().optional(),
 });
 export type InsurerCreateInput = z.infer<typeof insurerCreateSchema>;
 export const insurerUpdateSchema = insurerCreateSchema.partial();
@@ -528,6 +549,52 @@ export interface PublicInsurer {
   exclusionsRu: string | null;
   medicalLimitInfo: string | null;
   verifiedAt: string | null;
+  sourceUrl: string | null;
+  /** verifiedAt and sourceUrl are both set; otherwise the site shows a "not yet verified" notice. */
+  verified: boolean;
+}
+
+// ─── Pilot round: settings a super admin edits (disclaimers, document retention) ──
+
+export const SITE_SETTING_KEYS = ['disclaimer.visa', 'disclaimer.insurance', 'documents.retention_days'] as const;
+export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number];
+
+/**
+ * Wording used until a super admin saves their own (e.g. a lawyer's text). Not legal advice:
+ * a plain placeholder so the pages are never without a disclaimer.
+ */
+export const DEFAULT_DISCLAIMERS = {
+  visa:
+    'Информация о визах носит справочный характер и может измениться без предупреждения. Решение о выдаче визы и о въезде принимают только власти страны назначения. ' +
+    'Перед подачей проверьте требования на официальном сайте. Мы не оказываем визовых услуг и не подаём документы за вас.',
+  insurance:
+    'Сравнение страховщиков носит справочный характер и не является рекомендацией или консультацией по страхованию. ' +
+    'Условия, лимиты и исключения определяет договор страхования — прочитайте его до покупки. Мы не продаём страховые полисы.',
+} as const;
+
+export const siteSettingsUpdateSchema = z
+  .object({
+    disclaimerVisa: z.string().trim().min(20).max(4000),
+    disclaimerInsurance: z.string().trim().min(20).max(4000),
+    /** Days an operator's licence copy is kept after upload; null = keep until deleted by hand. */
+    documentRetentionDays: z.number().int().min(30).max(3650).nullable(),
+  })
+  .partial();
+export type SiteSettingsUpdateInput = z.infer<typeof siteSettingsUpdateSchema>;
+
+export interface PublicDisclaimers {
+  visa: string;
+  insurance: string;
+}
+
+export interface AdminSiteSettings {
+  disclaimerVisa: string;
+  disclaimerInsurance: string;
+  /** True while the built-in placeholder wording is used. */
+  disclaimerVisaIsDefault: boolean;
+  disclaimerInsuranceIsDefault: boolean;
+  documentRetentionDays: number | null;
+  updated: { key: SiteSettingKey; at: string; by: string | null }[];
 }
 
 // ─── Phase 2: review invites and submission (TV-5) ───────────────────────────
