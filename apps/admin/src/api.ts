@@ -2,6 +2,7 @@ import type {
   BookingState,
   AdminCountry,
   AdminSiteSettings,
+  NotificationChannelKind,
   SiteSettingsUpdateInput,
   CountryCreateInput,
   CountryUpdateInput,
@@ -45,6 +46,8 @@ import type {
 
 export interface Operator {
   id: string;
+  /** Pilot round: how the operator is notified (email only for now). */
+  preferredChannel: NotificationChannelKind;
   slug: string;
   name: string;
   legalName: string | null;
@@ -377,6 +380,8 @@ export const api = {
   },
   reviewDocument: (operatorId: string, id: string, notes: string) => request<OperatorDocument>('POST', `/admin/operators/${operatorId}/documents/${id}/review`, { notes }),
   deleteDocument: (operatorId: string, id: string, reason: string) => request<OperatorDocument>('DELETE', `/admin/operators/${operatorId}/documents/${id}`, { reason }),
+  setNotificationChannel: (operatorId: string, preferredChannel: NotificationChannelKind) =>
+    request<{ preferredChannel: NotificationChannelKind }>('PUT', `/admin/operators/${operatorId}/notification-channel`, { preferredChannel }),
   settings: () => request<AdminSiteSettings>('GET', '/admin/settings'),
   updateSettings: (body: SiteSettingsUpdateInput) => request<AdminSiteSettings>('PUT', '/admin/settings', body),
   retentionDue: () => request<RetentionDue>('GET', '/admin/documents/retention'),

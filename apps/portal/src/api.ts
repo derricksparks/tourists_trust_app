@@ -1,4 +1,5 @@
 import type {
+  NotificationChannelKind,
   BookingReportInput,
   BookingSide,
   BookingState,
@@ -73,7 +74,7 @@ export interface Application {
   licensingAuthority: string; address: string; yearEstablished: number | null; referenceContactName: string | null; referenceContactInfo: string | null;
   websiteUrl: string | null; email: string | null; phone: string | null; telegramUsername: string | null; descriptionRu: string | null; descriptionEn: string | null;
   verificationVideoUrl: string | null; status: OperatorStatus; statusReason: string | null; submittedAt: string | null; approvedAt: string | null;
-  badgeToken: string | null; editable: boolean; missing: { key: string; label: string }[];
+  badgeToken: string | null; editable: boolean; preferredChannel: NotificationChannelKind; missing: { key: string; label: string }[];
   country: { code: string; nameEn: string; licenceRegisterUrl: string | null };
   documents: OperatorDocument[];
 }
@@ -137,6 +138,7 @@ export const api = {
   application: () => request<Application>('GET', '/portal/operator/application'),
   updateApplication: (body: OperatorApplicationInput) => request<Application>('PATCH', '/portal/operator/application', body),
   submitApplication: () => request<Application>('POST', '/portal/operator/application/submit'),
+  setNotificationChannel: (preferredChannel: NotificationChannelKind) => request<{ preferredChannel: NotificationChannelKind }>('PUT', '/portal/operator/notification-channel', { preferredChannel }),
   uploadDocument: (type: DocumentType, file: File) => {
     const body = new FormData();
     body.append('type', type);

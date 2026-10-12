@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { OPERATOR_TRANSITIONS, OperatorDecision } from '@ttp/shared-types';
+import { AVAILABLE_NOTIFICATION_CHANNELS, NOTIFICATION_CHANNEL_LABEL, NOTIFICATION_CHANNELS, NotificationChannelKind, OPERATOR_TRANSITIONS, OperatorDecision } from '@ttp/shared-types';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiError, OperatorDocument } from '../api';
@@ -138,6 +138,8 @@ export function OperatorDetailPage() {
               <dd>{op.descriptionEn ?? <Missing />}</dd>
               <dt>Badge token</dt>
               <dd className="mono">{op.badgeToken}</dd>
+              <dt>Notified by</dt>
+              <dd><ChannelSelect operatorId={op.id} value={op.preferredChannel} canEdit={canModerate} /></dd>
             </dl>
           </section>
 
@@ -237,6 +239,25 @@ function BadgeCode({ token, status }: { token: string; status: string }) {
 }
 
 const DOC_TYPE: Record<string, string> = { TOURISM_LICENSE: 'Tourism licence', BUSINESS_REGISTRATION: 'Business registration', OTHER: 'Other' };
+
+/** How the operator is told about questions and quote requests; only email exists so far. */
+function ChannelSelect({ operatorId, value, canEdit }: { operatorId: string; value: NotificationChannelKind; canEdit: boolean }) {
+  const queryClient = useQueryClient();
+  const save = useMutation({
+    mutationFn: (c: NotificationChannelKind) => api.setNotificationChannel(operatorId, c),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['operator', operatorId] }),
+  });
+  if (!canEdit) return <>{NOTIFICATION_CHANNEL_LABEL[value]}</>;
+  return (
+    <select aria-label="Notified by" value={value} disabled={save.isPending} onChange={(e) => save.mutate(e.target.value as NotificationChannelKind)} style={{ width: 'auto' }}>
+      {NOTIFICATION_CHANNELS.map((c) => (
+        <option key={c} value={c} disabled={!AVAILABLE_NOTIFICATION_CHANNELS.includes(c)}>
+          {NOTIFICATION_CHANNEL_LABEL[c]}{AVAILABLE_NOTIFICATION_CHANNELS.includes(c) ? '' : ' (coming later)'}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 /** Uploaded licence and registration (encrypted at rest; opening one is recorded in the history). */
 function DocumentsPanel({ operatorId, documents, registerUrl, canModerate }: { operatorId: string; documents: OperatorDocument[]; registerUrl: string | null; canModerate: boolean }) {

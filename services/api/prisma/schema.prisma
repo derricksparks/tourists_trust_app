@@ -139,6 +139,14 @@ enum FamTripStatus {
   CANCELLED
 }
 
+/// How an operator wants to be told about questions, quote requests and decisions (pilot round).
+/// Only EMAIL is implemented; the others are reserved so adding one needs no migration.
+enum NotificationChannel {
+  EMAIL
+  TELEGRAM
+  WHATSAPP
+}
+
 enum AdminRole {
   SUPER_ADMIN
   MODERATOR // operator approval, review moderation, translator verification
@@ -273,36 +281,37 @@ model TelegramUser {
 
 /// African ground operator (spec: Operator, extended per B2).
 model Operator {
-  id                   String         @id @default(uuid()) @db.Uuid
-  slug                 String         @unique // public URL: /operators/{slug}
+  id                   String              @id @default(uuid()) @db.Uuid
+  slug                 String              @unique // public URL: /operators/{slug}
   name                 String
-  legalName            String?        @map("legal_name")
-  countryCode          String         @map("country_code") @db.Char(2)
-  businessRegNumber    String         @map("business_reg_number")
-  tourismBoardLicense  String         @map("tourism_board_license")
-  licensingAuthority   String         @map("licensing_authority") // e.g. "Uganda Tourism Board", "TALA"
+  legalName            String?             @map("legal_name")
+  countryCode          String              @map("country_code") @db.Char(2)
+  businessRegNumber    String              @map("business_reg_number")
+  tourismBoardLicense  String              @map("tourism_board_license")
+  licensingAuthority   String              @map("licensing_authority") // e.g. "Uganda Tourism Board", "TALA"
   address              String
-  yearEstablished      Int?           @map("year_established") // "years operating" is derived from this
-  referenceContactName String?        @map("reference_contact_name")
-  referenceContactInfo String?        @map("reference_contact_info")
-  websiteUrl           String?        @map("website_url") // badge and mirror pages link back here
+  yearEstablished      Int?                @map("year_established") // "years operating" is derived from this
+  referenceContactName String?             @map("reference_contact_name")
+  referenceContactInfo String?             @map("reference_contact_info")
+  websiteUrl           String?             @map("website_url") // badge and mirror pages link back here
   email                String?
   phone                String?
-  telegramUsername     String?        @map("telegram_username")
-  descriptionRu        String?        @map("description_ru")
-  descriptionEn        String?        @map("description_en")
-  status               OperatorStatus @default(PENDING)
-  statusReason         String?        @map("status_reason") // why rejected / flagged / suspended
-  verificationVideoUrl String?        @map("verification_video_url") // YouTube/Telegram link or storage URL
-  responseTimeScore    Float?         @map("response_time_score") // 0–100, computed (TV-6)
-  completenessScore    Float?         @map("completeness_score") // 0–100, computed (TV-6)
-  scoresComputedAt     DateTime?      @map("scores_computed_at")
-  badgeToken           String         @unique @map("badge_token") // unguessable id used by the embed widget
-  approvedAt           DateTime?      @map("approved_at")
-  submittedAt          DateTime?      @map("submitted_at") // last time the application went into the review queue
-  approvedById         String?        @map("approved_by_id") @db.Uuid
-  createdAt            DateTime       @default(now()) @map("created_at")
-  updatedAt            DateTime       @updatedAt @map("updated_at")
+  telegramUsername     String?             @map("telegram_username")
+  descriptionRu        String?             @map("description_ru")
+  descriptionEn        String?             @map("description_en")
+  status               OperatorStatus      @default(PENDING)
+  statusReason         String?             @map("status_reason") // why rejected / flagged / suspended
+  verificationVideoUrl String?             @map("verification_video_url") // YouTube/Telegram link or storage URL
+  responseTimeScore    Float?              @map("response_time_score") // 0–100, computed (TV-6)
+  completenessScore    Float?              @map("completeness_score") // 0–100, computed (TV-6)
+  scoresComputedAt     DateTime?           @map("scores_computed_at")
+  badgeToken           String              @unique @map("badge_token") // unguessable id used by the embed widget
+  approvedAt           DateTime?           @map("approved_at")
+  submittedAt          DateTime?           @map("submitted_at") // last time the application went into the review queue
+  preferredChannel     NotificationChannel @default(EMAIL) @map("preferred_channel") // pilot round: falls back to email if unavailable
+  approvedById         String?             @map("approved_by_id") @db.Uuid
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
 
   country         Country            @relation(fields: [countryCode], references: [code])
   approvedBy      AdminUser?         @relation("OperatorApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)

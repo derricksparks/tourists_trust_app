@@ -27,5 +27,6 @@ export const ACTION_LABELS: Record<string, string> = {
   'operator.document_upload': 'Document uploaded',
   'operator.document_view': 'Document opened',
   'operator.document_delete': 'Document file deleted',
+  'operator.notification_channel': 'Notification channel changed',
   'operator.document_review': 'Document checked',
 };

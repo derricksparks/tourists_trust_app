@@ -1,6 +1,7 @@
 import { Global, Injectable, Logger, Module } from '@nestjs/common';
 import { Account } from '@prisma/client';
 import { PrismaService } from '../common/prisma.service';
+import { NOTIFICATION_CHANNEL_PROVIDERS, OperatorNotifier, OutgoingMessage } from './channels';
 import { MailModule, MailService } from './mail.service';
 
 const url = (name: string, fallback: string) => (process.env[name] ?? fallback).replace(/\/$/, '');
@@ -14,7 +15,8 @@ const SIGN_EN = '\n\n—\nPartner team, Проверено: Африка (verifi
 
 /**
  * Who gets told what, and in which language: operators in English, Russian DMCs in Russian,
- * staff in English. Partners are reached through their active portal logins.
+ * staff in English. Partners are reached through their active portal logins. Operators get theirs on
+ * their preferred channel (OperatorNotifier; email today); DMCs and staff by email.
  */
 @Injectable()
 export class NotificationsService {
@@ -23,6 +25,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly operators: OperatorNotifier,
   ) {}
 
   /** Notifications follow an action that already succeeded, so a failure here is only logged. */
@@ -30,8 +33,9 @@ export class NotificationsService {
     fn().catch((e: Error) => this.logger.error(`Notification ${what} failed: ${e.message}`));
   }
 
-  private async operatorLogins(operatorId: string) {
-    return (await this.prisma.account.findMany({ where: { operatorId, active: true }, select: { email: true } })).map((a) => a.email);
+  /** To the operator on its chosen channel; false if nobody there can be reached. */
+  private async toOperator(operatorId: string, message: OutgoingMessage): Promise<boolean> {
+    return !!(await this.operators.send(operatorId, message));
   }
 
   private async dmcLogins(dmcId: string) {
@@ -59,8 +63,7 @@ export class NotificationsService {
         subject: `${resubmitted ? 'Operator answered your follow-up' : 'New operator application'}: ${op.name} (${op.country.nameEn})`,
         text: `${op.name} ${resubmitted ? 'updated its application after it was flagged' : 'applied to be listed'}.\n\nLicence: ${op.tourismBoardLicense} (${op.licensingAuthority})${op.country.licenceRegisterUrl ? `\nCheck it here: ${op.country.licenceRegisterUrl}` : ''}\n\nReview: ${adminUrl()}/operators/${op.id}`,
       });
-      this.mail.notify({
-        to: await this.operatorLogins(operatorId),
+      await this.toOperator(operatorId, {
         subject: 'We received your application',
         text: `Hello,\n\nThank you. ${op.name}'s application is now with our team. We check the licence and registration with ${op.licensingAuthority} and may contact your reference. This usually takes a few working days; we will email you the outcome.\n\nMeanwhile you can prepare your tours as drafts: ${portalUrl()}/packages${SIGN_EN}`,
       });
@@ -77,7 +80,7 @@ export class NotificationsService {
         reject: { subject: 'Your application was not approved', text: `We could not approve ${op.name}.${why}\n\nIf you think this is a mistake, reply to this email.` },
         suspend: { subject: `${op.name}'s listing is suspended`, text: `${op.name}'s listing is suspended and your badge now shows "verification revoked".${why}\n\nReply to this email to resolve it.` },
       }[decision];
-      this.mail.notify({ to: await this.operatorLogins(operatorId), subject: body.subject, text: `Hello,\n\n${body.text}${SIGN_EN}` });
+      await this.toOperator(operatorId, { subject: body.subject, text: `Hello,\n\n${body.text}${SIGN_EN}` });
     });
   }
 
@@ -86,14 +89,11 @@ export class NotificationsService {
     this.run('inquiryReceived', async () => {
       const i = await this.prisma.inquiry.findUniqueOrThrow({ where: { id: inquiryId }, include: { operator: true, package: true } });
       const details = `From: ${i.contactName?.split(' ')[0] ?? 'a traveller'} (Russia)${i.package ? `\nTour: ${i.package.title}` : ''}${i.travelMonth ? `\nTravel month: ${i.travelMonth}` : ''}${i.groupSize ? `\nGroup: ${i.groupSize}` : ''}\n\n"${i.message}"`;
-      const logins = await this.operatorLogins(i.operatorId);
-      if (logins.length) {
-        this.mail.notify({
-          to: logins,
-          subject: 'New question from a traveller',
-          text: `Hello,\n\nA traveller from Russia asked ${i.operator.name} a question (it may be in Russian):\n\n${details}\n\nAnswer in the portal; we deliver it to the traveller: ${portalUrl()}/inbox\n\nHow fast you answer counts towards your response-time score.${SIGN_EN}`,
-        });
-      } else {
+      const told = await this.toOperator(i.operatorId, {
+        subject: 'New question from a traveller',
+        text: `Hello,\n\nA traveller from Russia asked ${i.operator.name} a question (it may be in Russian):\n\n${details}\n\nAnswer in the portal; we deliver it to the traveller: ${portalUrl()}/inbox\n\nHow fast you answer counts towards your response-time score.${SIGN_EN}`,
+      });
+      if (!told) {
         this.mail.notify({
           to: this.mail.staffRecipients(),
           subject: `Traveller question for ${i.operator.name}, who has no portal login`,
@@ -118,8 +118,7 @@ export class NotificationsService {
       }
       if (state !== 'awaiting_other_side' || mine.outcome !== 'BOOKED') return;
       if (side === 'DMC') {
-        this.mail.notify({
-          to: await this.operatorLogins(q.package.operator.id),
+        await this.toOperator(q.package.operator.id, {
           subject: `Please confirm: ${q.dmc.name} reports a booking for ${q.package.title}`,
           text: `Hello,\n\n${q.dmc.name} reports that the quote for "${q.package.title}" became a booking${mine.bookedOn ? ` on ${enDate(mine.bookedOn)}` : ''}${mine.pax ? `, ${mine.pax} travellers` : ''}.\n\nPlease confirm or correct it in the portal: ${portalUrl()}/quotes${SIGN_EN}`,
         });
@@ -166,14 +165,11 @@ export class NotificationsService {
       const q = await this.prisma.quoteRequest.findUniqueOrThrow({ where: { id: quoteId }, include: { dmc: true, package: { include: { operator: true } } } });
       const op = q.package.operator;
       const details = `Tour: ${q.package.title}\nFrom: ${q.dmc.name} (Russia)\nTravellers: ${q.pax}\nDates: ${enDate(q.travelStartDate)}${q.travelEndDate ? ` – ${enDate(q.travelEndDate)}` : ''}${q.notes ? `\nNotes: ${q.notes}` : ''}`;
-      const logins = await this.operatorLogins(op.id);
-      if (logins.length) {
-        this.mail.notify({
-          to: logins,
-          subject: `Quote request: ${q.package.title} (${q.pax} pax)`,
-          text: `Hello,\n\nA Russian travel company has asked for your net price.\n\n${details}\n\nAnswer in the portal: ${portalUrl()}/quotes\n\nHow fast you answer counts towards your response-time score, which DMCs see when choosing a partner.${SIGN_EN}`,
-        });
-      } else {
+      const told = await this.toOperator(op.id, {
+        subject: `Quote request: ${q.package.title} (${q.pax} pax)`,
+        text: `Hello,\n\nA Russian travel company has asked for your net price.\n\n${details}\n\nAnswer in the portal: ${portalUrl()}/quotes\n\nHow fast you answer counts towards your response-time score, which DMCs see when choosing a partner.${SIGN_EN}`,
+      });
+      if (!told) {
         // No one at the operator can sign in yet, so staff pass it on.
         this.mail.notify({
           to: this.mail.staffRecipients(),
@@ -221,8 +217,7 @@ export class NotificationsService {
   famTripOperatorAdded(famTripId: string, operatorId: string): void {
     this.run('famTripOperatorAdded', async () => {
       const trip = await this.prisma.famTrip.findUniqueOrThrow({ where: { id: famTripId } });
-      this.mail.notify({
-        to: await this.operatorLogins(operatorId),
+      await this.toOperator(operatorId, {
         subject: `You're invited to host a fam trip: ${trip.title}`,
         text: `Hello,\n\nWe'd like you to host Russian travel companies on "${trip.title}" (${enDate(trip.startDate)} – ${enDate(trip.endDate)}).\n\nSee the plan and confirm in the portal: ${portalUrl()}/fam-trips${SIGN_EN}`,
       });
@@ -231,5 +226,5 @@ export class NotificationsService {
 }
 
 @Global()
-@Module({ imports: [MailModule], providers: [NotificationsService], exports: [NotificationsService, MailModule] })
+@Module({ imports: [MailModule], providers: [NotificationsService, OperatorNotifier, ...NOTIFICATION_CHANNEL_PROVIDERS], exports: [NotificationsService, OperatorNotifier, MailModule] })
 export class NotificationsModule {}

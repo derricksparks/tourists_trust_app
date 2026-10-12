@@ -1,10 +1,12 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { AdminUser } from '@prisma/client';
 import {
   OperatorCreateInput,
   OperatorDecisionInput,
   OperatorListQuery,
   OperatorUpdateInput,
+  NotificationChannelInput,
+  notificationChannelSchema,
   operatorCreateSchema,
   operatorDecisionSchema,
   operatorListQuerySchema,
@@ -47,6 +49,17 @@ export class AdminOperatorsController {
     @CurrentAdmin() admin: AdminUser,
   ) {
     return this.operators.update(id, body, admin);
+  }
+
+  /** How the operator is notified (pilot round). Staff set it when an operator asks by phone. */
+  @Put(':id/notification-channel')
+  @AdminRoles('SUPER_ADMIN', 'MODERATOR')
+  notificationChannel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(notificationChannelSchema)) body: NotificationChannelInput,
+    @CurrentAdmin() admin: AdminUser,
+  ) {
+    return this.operators.setNotificationChannel(id, body.preferredChannel, { actorAdminId: admin.id });
   }
 
   @Post(':id/decision')

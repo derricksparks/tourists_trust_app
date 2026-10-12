@@ -17,6 +17,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Res,
   UploadedFile,
   UseGuards,
@@ -31,6 +32,8 @@ import {
   OPERATOR_SUBMIT,
   OperatorApplicationInput,
   OperatorSignupInput,
+  NotificationChannelInput,
+  notificationChannelSchema,
   applicationMissing,
   operatorApplicationSchema,
   operatorSignupSchema,
@@ -46,6 +49,8 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { NotificationsService } from '../mail/notifications.service';
 import { newBadgeToken, uniqueOperatorSlug } from '../operators/operators.service';
 import { ScoringService } from '../scoring/scoring.service';
+import { OperatorsModule } from '../operators/operators.module';
+import { OperatorsService } from '../operators/operators.service';
 import { DocumentStore } from '../storage/document-store';
 import { CurrentAccount, PortalAccount, PortalAuthGuard, PortalAuthService, PortalRoles } from './portal-auth';
 
@@ -100,6 +105,7 @@ export class OnboardingController {
     private readonly store: DocumentStore,
     private readonly notifications: NotificationsService,
     private readonly scoring: ScoringService,
+    private readonly operators: OperatorsService,
   ) {}
 
   /** Countries an operator can sign up from, with the authority that licenses tour operators there. */
@@ -188,6 +194,14 @@ export class OnboardingController {
     return this.application(a);
   }
 
+  /** How we notify this operator (pilot round). Changeable at any status. */
+  @Put('operator/notification-channel')
+  @UseGuards(PortalAuthGuard)
+  @PortalRoles('OPERATOR')
+  notificationChannel(@Body(new ZodValidationPipe(notificationChannelSchema)) body: NotificationChannelInput, @CurrentAccount() a: PortalAccount) {
+    return this.operators.setNotificationChannel(operatorOf(a).id, body.preferredChannel, { actorAccountId: a.id });
+  }
+
   // ── Documents (licence, registration) ─────────────────────────────────────
 
   @Post('operator/documents')
@@ -267,5 +281,5 @@ export class AdminDocumentsController {
   }
 }
 
-@Module({ controllers: [OnboardingController, AdminDocumentsController] })
+@Module({ imports: [OperatorsModule], controllers: [OnboardingController, AdminDocumentsController] })
 export class OnboardingModule {}

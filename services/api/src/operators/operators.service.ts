@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { AdminUser, Operator, Prisma } from '@prisma/client';
+import { AdminUser, NotificationChannel, Operator, Prisma } from '@prisma/client';
 import {
   OperatorCreateInput,
   OperatorDecisionInput,
@@ -91,6 +91,19 @@ export class OperatorsService {
       });
       return operator;
     });
+  }
+
+  /** Pilot round: the operator's preferred notification channel, set by the operator or by staff. */
+  async setNotificationChannel(id: string, channel: NotificationChannel, actor: { actorAdminId?: string; actorAccountId?: string }) {
+    const before = await this.prisma.operator.findUnique({ where: { id }, select: { preferredChannel: true } });
+    if (!before) throw new NotFoundException('Operator not found');
+    if (before.preferredChannel !== channel) {
+      await this.prisma.$transaction([
+        this.prisma.operator.update({ where: { id }, data: { preferredChannel: channel } }),
+        this.prisma.auditLog.create({ data: { ...actor, action: 'operator.notification_channel', entityType: 'operator', entityId: id, metadata: { from: before.preferredChannel, to: channel } } }),
+      ]);
+    }
+    return { preferredChannel: channel };
   }
 
   async update(id: string, input: OperatorUpdateInput, admin: AdminUser): Promise<Operator> {

@@ -263,6 +263,7 @@ These keep the meaning of the spec's fields but change how they are stored:
 | *(Pilot round, requested 2026-10-12)* `Insurer` | + `source_url` (http(s), CHECK) | same rule with the existing `verified_at` |
 | *(Pilot round, requested 2026-10-12)* `OperatorDocument` | + `deleted_at`, `deleted_by_id` (CHECK: no deleter without a time) | staff erase licence copies (retention); the row stays so the record shows the document existed, was checked, and who deleted it |
 | *(Pilot round, requested 2026-10-12)* new `site_settings` | key (unique, CHECK on format), value, updated by, updated at | disclaimer wording on the visa and insurance pages and the document retention period, changed by a super admin without a code change; each change is in the audit log (`setting.update`) |
+| *(Pilot round, requested 2026-10-12)* `Operator` | + `preferred_channel` (enum EMAIL / TELEGRAM / WHATSAPP, default EMAIL) | each operator's notification channel. Only EMAIL can be chosen today; the other values are reserved so adding a channel needs no migration |
 
 ---
 
@@ -460,4 +461,21 @@ Small round before a pilot with 5–10 operators and 2–3 DMCs. Still no paymen
   or a super admin deletes all listed files at once. Deleting erases the encrypted file, keeps the row
   (`deleted_at`, who), and writes `operator.document_delete` with the reason into the operator's history. A
   deleted file can't be opened (410) and no longer counts towards an application.
+
+### 5. Operator notification channels
+
+- Operator notifications (new question, quote request, booking to confirm, application received, decisions,
+  fam-trip invitations) go through `OperatorNotifier` (`services/api/src/mail/channels.ts`). It picks the
+  operator's `preferred_channel` and falls back to email when that channel isn't built or can't reach the
+  operator. If nobody can be reached, staff are told instead (as before).
+- A channel implements `NotificationChannel` (`addresses(contact)`, `send(to, message)`). Only `EmailChannel`
+  exists. To add Telegram or WhatsApp: write the class, register it in `NOTIFICATION_CHANNEL_PROVIDERS`, and add its
+  kind to `AVAILABLE_NOTIFICATION_CHANNELS` in shared-types. Telegram will also need a way for the operator to link a
+  chat with the bot: the bot can only message people who started it, and a `telegram_username` is not enough.
+  WhatsApp needs a WhatsApp Business account. A test plugs in a stand-in channel to check the routing.
+- The setting: operators choose it under **Verification → Notifications** in the portal (any status);
+  moderators can change it on the operator page. Channels that aren't built yet are shown as "coming later" and
+  refused by the API. Changes are in the operator's history (`operator.notification_channel`).
+- DMC and staff notifications stay email only.
+- Not built (on purpose, this round): Telegram or WhatsApp alerts.
 

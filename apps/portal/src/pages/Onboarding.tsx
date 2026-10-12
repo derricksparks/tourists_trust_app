@@ -1,5 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { APPLICATION_REQUIREMENTS, DOCUMENT_MAX_BYTES, DOCUMENT_TYPES, DocumentType, ImportResult, OperatorApplicationInput, OperatorStatus } from '@ttp/shared-types';
+import {
+  APPLICATION_REQUIREMENTS,
+  AVAILABLE_NOTIFICATION_CHANNELS,
+  DOCUMENT_MAX_BYTES,
+  DOCUMENT_TYPES,
+  DocumentType,
+  ImportResult,
+  NOTIFICATION_CHANNEL_LABEL,
+  NOTIFICATION_CHANNELS,
+  NotificationChannelKind,
+  OperatorApplicationInput,
+  OperatorStatus,
+} from '@ttp/shared-types';
 import { ChangeEvent, FormEvent, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { api, ApiError, Application } from '../api';
@@ -236,7 +248,37 @@ function ApplicationView({ app, reload }: { app: Application; reload: (next?: Ap
       </form>
 
       <Documents app={app} reload={reload} />
+      <Notifications app={app} reload={reload} />
     </div>
+  );
+}
+
+/** How we tell the operator about questions, quote requests and decisions. Email only for now. */
+function Notifications({ app, reload }: { app: Application; reload: () => Promise<void> }) {
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const save = useMutation({
+    mutationFn: (c: NotificationChannelKind) => api.setNotificationChannel(c),
+    onSuccess: async () => {
+      setMsg({ kind: 'ok', text: 'Saved.' });
+      await reload();
+    },
+    onError: (e) => setMsg({ kind: 'err', text: errorText(e, 'Could not save. Try again.') }),
+  });
+  return (
+    <section className="panel" aria-labelledby="notify">
+      <h2 id="notify">Notifications</h2>
+      <p className="small muted">How we tell you about traveller questions, quote requests and our decisions. Emails go to everyone with a portal login.</p>
+      <div className="field">
+        <label htmlFor="channel">Send notifications by</label>
+        <select id="channel" value={app.preferredChannel} disabled={save.isPending} onChange={(e) => { setMsg(null); save.mutate(e.target.value as NotificationChannelKind); }} style={{ maxWidth: 260 }}>
+          {NOTIFICATION_CHANNELS.map((c) => {
+            const available = AVAILABLE_NOTIFICATION_CHANNELS.includes(c);
+            return <option key={c} value={c} disabled={!available}>{NOTIFICATION_CHANNEL_LABEL[c]}{available ? '' : ' (coming later)'}</option>;
+          })}
+        </select>
+      </div>
+      {msg && <p className={`alert ${msg.kind}`} role={msg.kind === 'err' ? 'alert' : 'status'}>{msg.text}</p>}
+    </section>
   );
 }
 

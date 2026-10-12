@@ -943,3 +943,20 @@ export function bookingState(reports: Pick<BookingReportView, 'side' | 'outcome'
   if (differences.length) return { state: 'disputed', differences };
   return { state: dmc.outcome === 'BOOKED' ? 'confirmed' : 'not_booked', differences };
 }
+
+// ─── Pilot round: how operators are notified ─────────────────────────────────
+
+/** Channels the data model knows. Only those in AVAILABLE_NOTIFICATION_CHANNELS can be chosen today. */
+export const NOTIFICATION_CHANNELS = ['EMAIL', 'TELEGRAM', 'WHATSAPP'] as const;
+export type NotificationChannelKind = (typeof NOTIFICATION_CHANNELS)[number];
+/** Add a channel here once the API has a NotificationChannel for it (services/api/src/mail/channels.ts). */
+export const AVAILABLE_NOTIFICATION_CHANNELS: readonly NotificationChannelKind[] = ['EMAIL'];
+export const NOTIFICATION_CHANNEL_LABEL: Record<NotificationChannelKind, string> = { EMAIL: 'Email', TELEGRAM: 'Telegram', WHATSAPP: 'WhatsApp' };
+
+export const notificationChannelSchema = z.object({
+  preferredChannel: z
+    .enum(NOTIFICATION_CHANNELS)
+    .refine((c) => AVAILABLE_NOTIFICATION_CHANNELS.includes(c), (c) => ({ message: `${NOTIFICATION_CHANNEL_LABEL[c]} notifications are not available yet` })),
+});
+export type NotificationChannelInput = z.infer<typeof notificationChannelSchema>;
+

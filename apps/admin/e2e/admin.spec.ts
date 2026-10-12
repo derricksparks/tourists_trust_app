@@ -305,3 +305,11 @@ test('a moderator deletes a licence copy past the retention period, and it is re
   await expect(page.getByText(/File deleted .* by /)).toBeVisible();
   await expect(page.locator('ol.history')).toContainText('Retention period passed (e2e)');
 });
+
+test('staff see how an operator is notified', async ({ page }) => {
+  await signIn(page, 'moderator@example.com');
+  await page.goto('/operators?status=APPROVED');
+  await page.getByRole('link', { name: 'Pearl Gorilla Treks (demo)' }).click();
+  await expect(page.getByLabel('Notified by')).toHaveValue('EMAIL');
+  await expect(page.getByLabel('Notified by').locator('option', { hasText: 'WhatsApp (coming later)' })).toBeDisabled();
+});

@@ -39,6 +39,9 @@ Pinned versions are deliberate; don't bump majors without asking.
 - Email: `NotificationsService` (`services/api/src/mail`) decides who is told what (EN operators/staff, RU DMCs) over
   `MailService` (SMTP via `SMTP_URL`; without it messages are only logged and kept in `MailService.sent`, which tests read).
   Notify after the action succeeds; never let an email failure undo it.
+  Operator notifications go through `OperatorNotifier` (`src/mail/channels.ts`): the operator's `preferred_channel`,
+  falling back to email. Only email exists; a new channel implements `NotificationChannel` and is listed in
+  `AVAILABLE_NOTIFICATION_CHANNELS` (shared-types).
 - Production: `infra/production` (Docker Compose + Caddy), guide in `docs/DEPLOY.md`. Never run the seed there;
   `node dist/cli/setup.js <email> "<name>" [role]` creates staff logins and the country list.
 - Telegram from the API: `TelegramBotApi` (send only). The bot process forwards button presses to `/bot/*`,

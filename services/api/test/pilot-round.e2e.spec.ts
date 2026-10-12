@@ -5,6 +5,7 @@ import request from 'supertest';
 import { PrismaService } from '../src/common/prisma.service';
 import { Mail, MailService } from '../src/mail/mail.service';
 import { ScoringService } from '../src/scoring/scoring.service';
+import { EmailChannel, NotificationChannel, OperatorNotifier, OutgoingMessage } from '../src/mail/channels';
 import { DocumentStore } from '../src/storage/document-store';
 import { signInitData } from '../src/telegram/init-data';
 import { mkdtempSync } from 'fs';
@@ -496,5 +497,57 @@ describe('document retention', () => {
     expect(audits).toHaveLength(2);
     expect(audits[0].metadata).toMatchObject({ retentionDays: 730 });
     expect((await asMod(http().get('/admin/documents/retention'))).body.documents).toEqual([]);
+  });
+});
+
+describe('operator notification channel', () => {
+  it('defaults to email; operators and staff can set it, only to a channel that exists today', async () => {
+    const { op, token } = await operatorWithLogin();
+    expect(op.preferredChannel).toBe('EMAIL');
+    expect((await bearer(http().get('/portal/operator/application'), token).expect(200)).body.preferredChannel).toBe('EMAIL');
+
+    const refused = await bearer(http().put('/portal/operator/notification-channel'), token).send({ preferredChannel: 'WHATSAPP' }).expect(400);
+    expect(JSON.stringify(refused.body)).toContain('WhatsApp notifications are not available yet');
+    await bearer(http().put('/portal/operator/notification-channel'), token).send({ preferredChannel: 'PIGEON' }).expect(400);
+    await bearer(http().put('/portal/operator/notification-channel'), token).send({ preferredChannel: 'EMAIL' }).expect(200);
+    await asMod(http().put(`/admin/operators/${op.id}/notification-channel`)).send({ preferredChannel: 'TELEGRAM' }).expect(400);
+    const editor = await tokenFor(app, (await createAdmin(prisma, 'CONTENT_EDITOR')).email);
+    await bearer(http().put(`/admin/operators/${op.id}/notification-channel`), editor).send({ preferredChannel: 'EMAIL' }).expect(403);
+
+    // A real change is recorded in the operator's history.
+    await prisma.operator.update({ where: { id: op.id }, data: { preferredChannel: 'TELEGRAM' } });
+    await asMod(http().put(`/admin/operators/${op.id}/notification-channel`)).send({ preferredChannel: 'EMAIL' }).expect(200);
+    const detail = await asMod(http().get(`/admin/operators/${op.id}`)).expect(200);
+    expect(detail.body.preferredChannel).toBe('EMAIL');
+    expect(detail.body.history[0]).toMatchObject({ action: 'operator.notification_channel', metadata: { from: 'TELEGRAM', to: 'EMAIL' } });
+  });
+
+  it('a new channel plugs in: the preferred one is used when it can reach the operator, email otherwise', async () => {
+    const sent: { to: string[]; message: OutgoingMessage }[] = [];
+    const fakeTelegram: NotificationChannel = {
+      kind: 'TELEGRAM',
+      addresses: (c) => (c.telegramUsername ? [c.telegramUsername] : []),
+      send: async (to, message) => void sent.push({ to, message }),
+    };
+    const notifier = new OperatorNotifier(prisma, [app.get(EmailChannel), fakeTelegram]);
+    const { op } = await operatorWithLogin();
+    const message = { subject: 'New question from a traveller', text: 'Hello' };
+
+    expect(await notifier.send(op.id, message)).toEqual({ channel: 'EMAIL', to: ['staff@alpha.example'] });
+    await prisma.operator.update({ where: { id: op.id }, data: { preferredChannel: 'TELEGRAM', telegramUsername: 'alpha_ops' } });
+    expect(await notifier.send(op.id, message)).toEqual({ channel: 'TELEGRAM', to: ['alpha_ops'] });
+    expect(sent).toEqual([{ to: ['alpha_ops'], message }]);
+    // Can't reach them on Telegram: falls back to email.
+    await prisma.operator.update({ where: { id: op.id }, data: { telegramUsername: null } });
+    expect(await notifier.send(op.id, message)).toEqual({ channel: 'EMAIL', to: ['staff@alpha.example'] });
+    // The running API has email only, so a stored TELEGRAM preference still reaches them by email.
+    await prisma.operator.update({ where: { id: op.id }, data: { telegramUsername: 'alpha_ops' } });
+    mail.sent.length = 0;
+    expect(await app.get(OperatorNotifier).send(op.id, message)).toEqual({ channel: 'EMAIL', to: ['staff@alpha.example'] });
+    expect(mail.sent).toHaveLength(1);
+    // Nobody can sign in and no other channel reaches them: nothing is sent.
+    await prisma.account.updateMany({ where: { operatorId: op.id }, data: { active: false } });
+    await prisma.operator.update({ where: { id: op.id }, data: { telegramUsername: null } });
+    expect(await notifier.send(op.id, { subject: 'x', text: 'y' })).toBeNull();
   });
 });

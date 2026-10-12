@@ -301,6 +301,8 @@ To restore a copy you kept off the server, first copy it into `infra/production/
 ## What was tested
 
 Pilot round (12 October 2026):
+- Operator notifications go out by email whatever an operator chooses; Telegram and WhatsApp are listed
+  in the portal as "coming later".
 - Content safety (verification notices, disclaimers, document deletion and retention) has automated API and
   browser tests.
 - `restore-check.sh` passed on a real backup, and failed correctly on a broken file and on an empty

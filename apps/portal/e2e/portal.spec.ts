@@ -200,3 +200,12 @@ test('an operator confirms a booking the DMC reported', async ({ page }) => {
   await card.getByRole('button', { name: 'Save' }).click();
   await expect(card).toContainText('Confirmed by both sides');
 });
+
+test('an operator sees how we notify them: email now, other channels later', async ({ page }) => {
+  await signIn(page, 'operator@example.com');
+  await page.getByRole('link', { name: 'Verification' }).click();
+  const channel = page.getByLabel('Send notifications by');
+  await expect(channel).toHaveValue('EMAIL');
+  await expect(channel.locator('option', { hasText: 'WhatsApp (coming later)' })).toBeDisabled();
+  await expect(channel.locator('option', { hasText: 'Telegram (coming later)' })).toBeDisabled();
+});

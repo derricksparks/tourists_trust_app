@@ -4,6 +4,6 @@ import { OperatorsService } from './operators.service';
 
 @Module({
   controllers: [AdminOperatorsController],
-  providers: [OperatorsService],
+  providers: [OperatorsService], exports: [OperatorsService],
 })
 export class OperatorsModule {}
