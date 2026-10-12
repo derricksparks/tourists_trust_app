@@ -422,3 +422,19 @@ Small round before a pilot with 5–10 operators and 2–3 DMCs. Still no paymen
   look like formulas are neutralised). Used to invoice introduction fees by hand: no billing or payment
   features were added.
 
+### 3. Pilot-readiness checks
+
+- **Email deliverability:** `docs/DEPLOY.md` §3 lists the SPF, DKIM, DMARC, return-path and MX records, and how
+  to check them. `cli/send-test-email.js` checks the sender domain's SPF and DMARC records (and DKIM, given the
+  selector), sends one test per address with the API's own settings, reports accepted/refused per address,
+  and exits 1 on any failure.
+- **Hosting:** a Russian host and a foreign host compared on payment from a Russian card, speed from inside
+  Russia, and where Russian travellers' personal data is stored. Items needing legal advice are listed
+  explicitly (152-FZ data localisation, Roskomnadzor notifications, sanctions, a split setup). The setup stays
+  provider-neutral.
+- **Health:** `/health` returns status, uptime, start time, optional `APP_VERSION` and the database check
+  (latency), with 503 when the database is unreachable.
+- **Restore:** `infra/production/restore-check.sh` (a drill into a scratch database, automated test) and
+  `restore.sh` (real restore: drill first, safety copy, stop, restore database and documents, start, wait for
+  health; requires `--yes`).
+

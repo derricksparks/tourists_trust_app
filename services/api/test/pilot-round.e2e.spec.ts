@@ -242,3 +242,105 @@ describe('booked status on quotes', () => {
     expect(toCsv(['a', 'b'], [['x, y', '=SUM(A1)'], ['say "hi"', null]])).toBe('a,b\r\n"x, y",\'=SUM(A1)\r\n"say ""hi""",\r\n');
   });
 });
+
+describe('pilot-readiness checks', () => {
+  it('health reports uptime and the database check', async () => {
+    const res = await http().get('/health').expect(200);
+    expect(res.body).toMatchObject({ status: 'ok', checks: { database: { ok: true } } });
+    expect(res.body.uptimeSeconds).toEqual(expect.any(Number));
+    expect(Object.keys(res.body).sort()).toEqual(['checks', 'startedAt', 'status', 'time', 'uptimeSeconds', 'version']);
+  });
+
+  it('the test-email script reports each address, including a refused one', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { sendTestEmails } = require('../src/cli/send-test-email');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createServer } = require('net');
+    const received: string[] = [];
+    const server = createServer((socket: import('net').Socket) => {
+      let inData = false;
+      socket.write('220 test\r\n');
+      socket.on('data', (chunk: Buffer) => {
+        for (const line of chunk.toString().split('\r\n')) {
+          if (!line) continue;
+          if (inData) {
+            if (line === '.') {
+              inData = false;
+              socket.write('250 2.0.0 queued as TEST1\r\n');
+            } else received.push(line);
+          } else if (/^(EHLO|HELO)/i.test(line)) socket.write('250 test\r\n');
+          else if (/^RCPT TO:<[^>]*refused[^>]*>/i.test(line)) socket.write('550 5.7.1 recipient refused\r\n');
+          else if (/^DATA/i.test(line)) {
+            inData = true;
+            socket.write('354 go\r\n');
+          } else if (/^QUIT/i.test(line)) socket.end('221 bye\r\n');
+          else socket.write('250 ok\r\n');
+        }
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const transport = require('nodemailer').createTransport(`smtp://127.0.0.1:${server.address().port}?ignoreTLS=true`);
+      const results = await sendTestEmails(transport, ['me@mail.ru', 'refused@yandex.ru', 'not-an-address'], { from: { name: 'Проверено: Африка', address: 'no-reply@site.example' }, runId: 'RUN1' });
+      expect(results.map((r: { ok: boolean }) => r.ok)).toEqual([true, false, false]);
+      expect(results[0].detail).toContain('accepted');
+      expect(results[1].detail).toMatch(/refused/);
+      expect(results[2].detail).toBe('not an email address');
+      // Headers and body are encoded (Cyrillic): decode the base64 body and look for the run id.
+      const body = Buffer.from(received.filter((l) => /^[A-Za-z0-9+/=]+$/.test(l)).join(''), 'base64').toString('utf8');
+      expect(body).toContain('Test RUN1');
+    } finally {
+      server.close();
+    }
+  });
+
+  it('the DNS check finds SPF and DMARC, and spots a missing or duplicated record', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { checkSenderDns } = require('../src/cli/send-test-email');
+    const zone: Record<string, string[][]> = {
+      'good.example': [['v=spf1 include:_spf.provider.example ~all'], ['google-site-verification=x']],
+      '_dmarc.good.example': [['v=DMARC1; p=none; rua=mailto:dmarc@good.example']],
+      's1._domainkey.good.example': [['v=DKIM1; k=rsa; p=MIIBIjANBg']],
+      'double.example': [['v=spf1 include:a ~all'], ['v=spf1 include:b ~all']],
+    };
+    const resolver = { resolveTxt: async (name: string) => { if (!zone[name]) throw new Error('ENOTFOUND'); return zone[name]; } };
+    const good = await checkSenderDns('good.example', 's1', resolver);
+    expect(good.map((c: { record: string; ok: boolean }) => [c.record, c.ok])).toEqual([['SPF', true], ['DMARC', true], ['DKIM', true]]);
+    const bad = await checkSenderDns('double.example', undefined, resolver);
+    expect(bad.map((c: { record: string; ok: boolean }) => [c.record, c.ok])).toEqual([['SPF', false], ['DMARC', false]]);
+    expect(bad[0].detail).toContain('merge them into one');
+  });
+});
+
+describe('restore drill (infra/production/restore-check.sh)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { execFileSync, spawnSync } = require('child_process');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { mkdtempSync, writeFileSync } = require('fs');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { join } = require('path');
+  // Needs PostgreSQL 16+ client tools (the server is 16); skipped where they aren't installed.
+  const version = spawnSync('pg_dump', ['--version'], { encoding: 'utf8' });
+  const hasTools = version.status === 0 && Number(/(\d+)\./.exec(version.stdout)?.[1] ?? 0) >= 16;
+  const script = join(__dirname, '../../../infra/production/restore-check.sh');
+  const url = new URL(process.env.DATABASE_URL!);
+  const pgEnv = { ...process.env, PGHOST: url.hostname, PGPORT: url.port || '5432', PGUSER: decodeURIComponent(url.username), PGPASSWORD: decodeURIComponent(url.password), PGDATABASE: url.pathname.slice(1), CHECK_DB: 'ttp_restore_check_test' };
+
+  (hasTools ? it : it.skip)('restores the newest backup into a scratch database, checks it and removes it; fails on a broken file', async () => {
+    await operatorWithLogin();
+    const dir = mkdtempSync(join(require('os').tmpdir(), 'ttp-backups-'));
+    execFileSync('pg_dump', ['--format=custom', '-f', join(dir, 'ttp-2026-10-12T0300.dump')], { env: pgEnv });
+    const ok = spawnSync('sh', [script], { env: { ...pgEnv, BACKUP_DIR: dir }, encoding: 'utf8' });
+    expect(ok.stdout).toContain('PASS: restore check passed');
+    expect(ok.stdout).toMatch(/operators: 1 rows/);
+    expect(ok.status).toBe(0);
+    const left = await prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM pg_database WHERE datname = 'ttp_restore_check_test'`;
+    expect(Number(left[0].n)).toBe(0);
+
+    writeFileSync(join(dir, 'ttp-2026-10-13T0300.dump'), 'not a dump');
+    const bad = spawnSync('sh', [script], { env: { ...pgEnv, BACKUP_DIR: dir }, encoding: 'utf8' });
+    expect(bad.status).not.toBe(0);
+    expect(bad.stderr).toContain('FAIL: not a readable pg_dump archive');
+  });
+});

@@ -38,8 +38,33 @@ So:
 - Also check it loads quickly from Uganda, Kenya and Tanzania, for operators and staff.
 - **Server size:** 2 vCPU, 4 GB RAM and 40 GB SSD is enough for the pilot. Use Ubuntu 24.04 LTS.
 
-This keeps decision B5.2: we are not hosting in Russia, so no Russian-hosting obligations apply yet.
-If the pilot shows a Russian host is needed, this same setup runs there unchanged.
+This keeps decision B5.2: we are not hosting in Russia for now. The setup is provider-neutral, so if the
+pilot or legal advice says a Russian host is needed, the same setup runs there unchanged.
+
+### Russian host or foreign host?
+
+| | Host inside Russia | Host outside Russia |
+|---|---|---|
+| **Paying for it** | Russian providers take Russian cards (Mir) and rouble transfers. A company outside Russia usually **cannot** pay them with a foreign card: foreign Visa/Mastercard cards don't work in Russia. Expect to need a rouble account or an intermediary. | Foreign providers take foreign cards. **Cards issued by Russian banks don't work for payments abroad** (since 2022), and most foreign providers don't accept Mir. Pay from the company's non-Russian account. |
+| **Speed for travellers in Russia** | Fast, and not affected by the throttling of foreign networks. Somewhat slower for operators and staff in East Africa, but fine for a portal. | Depends on the provider: some large Western clouds and CDNs are throttled or blocked in Russia (see above). **Test from inside Russia before committing.** |
+| **Where Russian travellers' personal data is stored** | In Russia. That is what Russian data law expects (see below). Russian authorities can demand access to data held there. | Outside Russia. That may conflict with Russian data law (see below). |
+
+**Needs legal advice before the pilot collects real travellers' data (do not guess these):**
+
+- **Russian personal-data law (152-FZ).** It requires personal data of Russian citizens to be first collected
+  and stored in databases located in Russia. Does it apply to us? We are a company outside Russia, but the site
+  is in Russian and aimed at Russian travellers. The regulator (Roskomnadzor) can block websites that break
+  this rule; LinkedIn was blocked in Russia in 2016 for this reason.
+- **Notifications to the regulator.** Do we have to register as a personal-data operator with Roskomnadzor,
+  and notify it before transferring data out of Russia?
+- **Sanctions.** Does our company's country, or a provider's, allow us to pay a Russian hosting company, or
+  allow a provider to serve us? This also decides which email providers we may use.
+- **A split setup.** Keep travellers' personal data on a Russian server and everything else abroad. The data
+  model keeps that data in separate tables (`telegram_users`, `inquiries`, `inquiry_replies`, `reviews`,
+  `review_invites`), so this is a bounded piece of build work if the lawyer recommends it. It is not built.
+
+What we keep about travellers is deliberately small: Telegram ID and name, their questions and our answers, and
+review texts. Nothing about passports or payments.
 
 ## 2. Domain and DNS
 
@@ -66,8 +91,8 @@ before choosing:
 At the provider:
 
 1. Add your domain. Use a subdomain such as `mail.example.org` if the provider suggests it.
-2. Add the **SPF, DKIM and DMARC** DNS records it gives you, and wait until it shows them as verified.
-   Without these, Russian mailboxes put the emails in spam.
+2. Add the **SPF, DKIM and DMARC** DNS records (exact records below), and wait until the provider shows
+   them as verified. Without these, mail.ru, Yandex and Gmail put the emails in spam or refuse them.
 3. Create SMTP credentials and note the host, port, user and password.
 
 Then fill these in `infra/production/.env` (step 4):
@@ -79,6 +104,48 @@ Then fill these in `infra/production/.env` (step 4):
 | `MAIL_FROM_NAME` | `Проверено: Африка` | sender name shown in inboxes |
 | `MAIL_REPLY_TO` | `partners@example.org` | a real mailbox your team reads; partners' replies go here |
 | `STAFF_EMAILS` | `ops@example.org` | staff alerts, comma-separated |
+
+### DNS records for email
+
+Replace `example.org` with the domain in `MAIL_FROM`. The provider's own values go where the angle brackets
+are; its dashboard shows them. Add the records at your DNS provider (the same place as the A records in §2).
+
+| Type | Name (host) | Value | Notes |
+|---|---|---|---|
+| TXT | `example.org` (often written `@`) | `v=spf1 include:<provider's SPF domain> ~all` | **SPF.** Only **one** SPF record per domain. If you already have one (e.g. for your own mailboxes), add the `include:` to it instead of making a second: `v=spf1 include:<mailbox host> include:<provider> ~all`. |
+| TXT or CNAME | `<selector>._domainkey.example.org` | TXT: `v=DKIM1; k=rsa; p=<public key from the provider>`, or CNAME to the provider's key host | **DKIM.** The provider gives the selector (e.g. `s1`) and the key. Copy them exactly; long TXT values may need splitting into 255-character pieces, which most DNS panels do for you. |
+| TXT | `_dmarc.example.org` | `v=DMARC1; p=none; rua=mailto:dmarc@example.org; adkim=r; aspf=r` | **DMARC.** Start with `p=none` and read the reports sent to `rua` for 2–4 weeks. When only your provider appears as a sender, change to `p=quarantine`, later `p=reject`. |
+| CNAME | e.g. `bounces.example.org` → `<provider host>` | | **Return path** (only if the provider offers a custom one). It makes SPF "align" with your domain, which DMARC rewards. |
+| MX | `example.org` → your mailbox host | | Only for **receiving** mail at `MAIL_REPLY_TO` (e.g. `partners@example.org`). Sending doesn't need it, but partners' replies do. |
+
+Check what is published (on any computer with `dig`, or an online "DNS lookup" tool):
+
+```bash
+dig +short TXT example.org            # one line starting v=spf1
+dig +short TXT _dmarc.example.org     # v=DMARC1; …
+dig +short TXT s1._domainkey.example.org
+```
+
+The free postmaster dashboards of Gmail (Postmaster Tools), Mail.ru (Postmaster) and Yandex show how they
+rate your domain once you send regularly. Register the domain with each.
+
+### Test delivery
+
+On the server, after `docker compose up -d`:
+
+```bash
+docker compose exec api node dist/cli/send-test-email.js you@mail.ru you@yandex.ru you@gmail.com --dkim-selector=<selector>
+```
+
+The script first checks the SPF, DMARC and DKIM records of the `MAIL_FROM` domain. It then sends one test
+message per address and prints `OK` (the provider accepted it) or `FAIL` with the reason; it exits with code 1
+if any send failed. "Accepted" isn't "delivered": **open each mailbox** and find "Delivery test <number>" in the
+inbox. If it landed in spam:
+- check the three records again;
+- wait a day after first adding DKIM;
+- mark the message "Not spam".
+
+Repeat until all three reach the inbox.
 
 **What gets emailed**
 
@@ -151,9 +218,9 @@ locked out.
 ## 6. Before inviting partners
 
 - [ ] Site, admin and portal open over HTTPS from Russia (home and mobile) and from East Africa.
-- [ ] In the dashboard, create a portal login for an address you control at **mail.ru**, one at
-      **yandex.ru** and one at **gmail.com**. Check each email arrives in the inbox, not spam, and
-      that the link works.
+- [ ] Run the delivery test in §3 against addresses you control at **mail.ru**, **yandex.ru** and
+      **gmail.com** until all three land in the inbox. Then create a portal login for one of them and check
+      the link in the email works.
 - [ ] Use "Forgot your password?" on the portal once.
 - [ ] Apply as a test DMC at `https://partners.example.org/signup`. Check staff get the email, then
       reject the test DMC.
@@ -167,8 +234,11 @@ locked out.
 - [ ] Replace the placeholder content: site name, visa guides (still drafts until checked against
       official sources) and insurer details. The site needs a privacy policy before collecting
       travellers' contacts.
-- [ ] Set up an uptime monitor (any free service) on `https://admin.example.org/api/health`.
-- [ ] Do a restore drill (below) once, so you know it works.
+- [ ] Set up an uptime monitor (any free service) on `https://admin.example.org/api/health`. It answers 200
+      with `"status":"ok"`, the uptime and the database response time, or 503 when the database is down.
+      Optional: start with `APP_VERSION=$(git rev-parse --short HEAD) docker compose up -d --build` to see the
+      running version there.
+- [ ] Run the restore drill (§8) once, so you know backups work.
 
 ## 7. Day to day
 
@@ -193,20 +263,47 @@ and deletes files older than 14 days. **They are on the same server**, so also:
 - copy the dumps somewhere else regularly, e.g. from your own computer:
   `rsync -av user@server:tourists_trust_app/infra/production/backups/ ./ttp-backups/`
 
-**Restoring a backup** (replaces all data):
+**Restore drill (safe, do it monthly).** This restores the newest backup into a scratch database, checks
+the tables and row counts, then deletes the scratch database. Live data is not touched.
 
 ```bash
 cd tourists_trust_app/infra/production
-docker compose stop api web bot
-docker compose exec db dropdb -U ttp ttp
-docker compose exec db createdb -U ttp ttp
-docker compose exec -T db pg_restore -U ttp -d ttp --no-owner < backups/ttp-2026-10-09T0300.dump
-# documents from the same night (needs the same DOCUMENT_ENCRYPTION_KEY in .env)
-docker compose run --rm -T --entrypoint sh -v ./backups:/backups api -c 'tar -xzf /backups/uploads-2026-10-09T0300.tar.gz -C /data/uploads'
-docker compose start api web bot
+docker compose run --rm --no-deps --entrypoint sh backup /restore-check.sh
+# or a specific file: … /restore-check.sh /backups/ttp-2026-10-09T0300.dump
 ```
 
+It ends with `PASS: restore check passed`, or `FAIL: …` and a non-zero exit code.
+
+**Restoring a backup for real** (replaces all live data):
+
+```bash
+cd tourists_trust_app/infra/production
+./restore.sh backups/ttp-2026-10-09T0300.dump backups/uploads-2026-10-09T0300.tar.gz --yes
+```
+
+The script:
+1. Refuses to run without `--yes`, or if the database container isn't running.
+2. Runs the drill on that file first.
+3. Saves the current database to `backups/before-restore-<time>.dump`.
+4. Stops the app, restores the database, and restores the documents if you gave the uploads file. Restoring
+   documents needs the same `DOCUMENT_ENCRYPTION_KEY` in `.env` as when they were saved.
+5. Starts the app and waits until `/health` is OK.
+
+To restore only the database and leave the app running, use `--database-only` (don't give an uploads file).
+To restore a copy you kept off the server, first copy it into `infra/production/backups/`.
+
 ## What was tested
+
+Pilot round (12 October 2026):
+- `restore-check.sh` passed on a real backup, and failed correctly on a broken file and on an empty
+  folder. It is also an automated test.
+- `restore.sh --database-only` restored a damaged database (18 of 18 operators and reviews back), kept the
+  safety copy, refused to run without `--yes`, refused when the database wasn't running, and refused a file
+  outside `backups/`. This ran on the production compose file with the `db` and `backup` containers.
+- **Not yet run end to end:** the full app stop/start and the documents restore. The app images can't be built
+  in that environment. Run it once on your server or laptop.
+- The delivery-test script was tested against a stand-in mail server (accepted, refused and invalid
+  addresses) and against stand-in DNS records.
 
 These checks were run while building this setup:
 

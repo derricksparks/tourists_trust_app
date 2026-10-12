@@ -50,6 +50,7 @@ services:
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-}
       MAIL_REPLY_TO: ${MAIL_REPLY_TO:-}
       STAFF_EMAILS: ${STAFF_EMAILS:-}
+      APP_VERSION: ${APP_VERSION:-}
       DOCUMENT_ENCRYPTION_KEY: ${DOCUMENT_ENCRYPTION_KEY:?set DOCUMENT_ENCRYPTION_KEY in .env}
       UPLOAD_DIR: /data/uploads
     volumes:
@@ -122,6 +123,7 @@ services:
     volumes:
       - ./backups:/backups
       - ./backup.sh:/backup.sh:ro
+      - ./restore-check.sh:/restore-check.sh:ro
       - uploads:/uploads:ro
     entrypoint: ["sh", "/backup.sh"]
     depends_on:

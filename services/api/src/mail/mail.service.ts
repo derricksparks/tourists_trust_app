@@ -7,6 +7,12 @@ export interface Mail {
   text: string;
 }
 
+/** The sender from MAIL_FROM / MAIL_FROM_NAME; the name is separate so it can contain anything ("Проверено: Африка" has a colon). */
+export function senderFromEnv(env: NodeJS.ProcessEnv = process.env): string | { name: string; address: string } {
+  const address = env.MAIL_FROM ?? 'no-reply@localhost';
+  return env.MAIL_FROM_NAME ? { name: env.MAIL_FROM_NAME, address } : address;
+}
+
 /**
  * Outgoing email over SMTP, so any provider works (set SMTP_URL, MAIL_FROM and optionally
  * MAIL_FROM_NAME). Without SMTP_URL nothing is sent: messages are logged and kept in `sent`
@@ -24,9 +30,7 @@ export class MailService implements OnModuleInit {
   constructor() {
     const url = process.env.SMTP_URL;
     this.transport = url ? createTransport(url) : null;
-    const address = process.env.MAIL_FROM ?? 'no-reply@localhost';
-    // The name is passed separately so it can contain anything ("Проверено: Африка" has a colon).
-    this.from = process.env.MAIL_FROM_NAME ? { name: process.env.MAIL_FROM_NAME, address } : address;
+    this.from = senderFromEnv();
     this.replyTo = process.env.MAIL_REPLY_TO || undefined;
   }
 
