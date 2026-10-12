@@ -28,6 +28,7 @@ export interface OperatorOverview {
   operator: { id: string; name: string; slug: string; status: OperatorStatus; statusReason: string | null };
   scores: OperatorScoreBreakdown;
   openQuotes: number;
+  newQuestions: number;
   packagesByStatus: Partial<Record<PackageStatus, number>>;
   upcomingFamTrips: number;
 }
@@ -69,6 +70,13 @@ export interface Application {
   badgeToken: string | null; editable: boolean; missing: { key: string; label: string }[];
   country: { code: string; nameEn: string; licenceRegisterUrl: string | null };
   documents: OperatorDocument[];
+}
+/** A traveller's question as the operator sees it: no Telegram handle or contact details. */
+export interface TravellerQuestion {
+  id: string; status: 'NEW' | 'RESPONDED' | 'CLOSED'; createdAt: string; firstResponseAt: string | null;
+  travellerName: string | null; message: string; travelMonth: string | null; groupSize: number | null;
+  package: { title: string; titleRu: string | null } | null; channel: 'TELEGRAM' | 'EMAIL';
+  replies: { id: string; body: string; createdAt: string; deliveredVia: 'TELEGRAM' | 'EMAIL'; by: 'operator' | 'staff' }[];
 }
 export interface ApiKey { id: string; name: string; prefix: string; lastUsedAt: string | null; revokedAt: string | null; createdAt: string }
 
@@ -136,6 +144,10 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, 'Could not open the file');
     window.open(URL.createObjectURL(await res.blob()), '_blank', 'noopener');
   },
+
+  // Operator: traveller questions (pilot round)
+  inbox: () => request<TravellerQuestion[]>('GET', '/portal/operator/inquiries'),
+  answerQuestion: (id: string, text: string) => request<TravellerQuestion>('POST', `/portal/operator/inquiries/${id}/reply`, { text }),
 
   // Operator: feed (Phase 4)
   apiKeys: () => request<ApiKey[]>('GET', '/portal/operator/api-keys'),

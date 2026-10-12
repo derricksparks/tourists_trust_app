@@ -33,6 +33,10 @@ export function OperatorOverviewPage() {
         )}
       </header>
       <section className="tiles" aria-label="To do">
+        <Link to="/inbox" className={`tile ${data.newQuestions ? 'attention' : ''}`}>
+          <span className="value">{data.newQuestions}</span>
+          <span>Traveller questions waiting for your answer</span>
+        </Link>
         <Link to="/quotes" className={`tile ${data.openQuotes ? 'attention' : ''}`}>
           <span className="value">{data.openQuotes}</span>
           <span>Quote requests waiting for your price</span>

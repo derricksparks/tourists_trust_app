@@ -81,6 +81,28 @@ export class NotificationsService {
     });
   }
 
+  /** A traveller asked an operator a question in the Mini App. */
+  inquiryReceived(inquiryId: string): void {
+    this.run('inquiryReceived', async () => {
+      const i = await this.prisma.inquiry.findUniqueOrThrow({ where: { id: inquiryId }, include: { operator: true, package: true } });
+      const details = `From: ${i.contactName?.split(' ')[0] ?? 'a traveller'} (Russia)${i.package ? `\nTour: ${i.package.title}` : ''}${i.travelMonth ? `\nTravel month: ${i.travelMonth}` : ''}${i.groupSize ? `\nGroup: ${i.groupSize}` : ''}\n\n"${i.message}"`;
+      const logins = await this.operatorLogins(i.operatorId);
+      if (logins.length) {
+        this.mail.notify({
+          to: logins,
+          subject: 'New question from a traveller',
+          text: `Hello,\n\nA traveller from Russia asked ${i.operator.name} a question (it may be in Russian):\n\n${details}\n\nAnswer in the portal; we deliver it to the traveller: ${portalUrl()}/inbox\n\nHow fast you answer counts towards your response-time score.${SIGN_EN}`,
+        });
+      } else {
+        this.mail.notify({
+          to: this.mail.staffRecipients(),
+          subject: `Traveller question for ${i.operator.name}, who has no portal login`,
+          text: `${details}\n\nNobody at ${i.operator.name} can sign in, so answer on their behalf or create a login: ${adminUrl()}/inquiries`,
+        });
+      }
+    });
+  }
+
   dmcApplied(dmc: { id: string; name: string; contactName: string | null; email: string | null; websiteUrl: string | null }) {
     this.mail.notify({
       to: this.mail.staffRecipients(),

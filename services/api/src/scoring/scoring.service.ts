@@ -34,8 +34,9 @@ export function responseScore(medianHours: number | null): number | null {
 
 /**
  * Operator scores (spec TV-6), computed from activity, never entered by hand.
- * Response time: median hours to the first answer, over traveller inquiries and DMC quote
- * requests from the last 90 days. Requests still unanswered after 72 hours count as 72 hours.
+ * Response time: median hours to the operator's own first answer, over traveller inquiries
+ * (answers written in the partner portal; staff answers on the operator's behalf don't count) and
+ * DMC quote requests from the last 90 days. Requests still unanswered after 72 hours count as 72 hours.
  * Completeness: points for the parts of a listing travellers rely on (see COMPLETENESS).
  */
 @Injectable()
@@ -52,7 +53,10 @@ export class ScoringService {
         where: { id: operatorId },
         include: { packages: { where: { status: 'PUBLISHED' }, include: { dateRanges: { where: { endDate: { gte: today } }, take: 1 } } } },
       }),
-      this.prisma.inquiry.findMany({ where: { operatorId, createdAt: { gte: since } }, select: { createdAt: true, firstResponseAt: true } }),
+      this.prisma.inquiry.findMany({
+        where: { operatorId, createdAt: { gte: since } },
+        select: { createdAt: true, status: true, replies: { where: { authorAccountId: { not: null } }, orderBy: { createdAt: 'asc' }, take: 1, select: { createdAt: true } } },
+      }),
       this.prisma.quoteRequest.findMany({ where: { package: { operatorId }, createdAt: { gte: since } }, select: { createdAt: true, quotedAt: true, closedAt: true } }),
     ]);
 
@@ -63,7 +67,13 @@ export class ScoringService {
       if (!answered && h < SLOW_HOURS) return;
       hours.push(Math.min(Math.max(h, 0), SLOW_HOURS));
     };
-    inquiries.forEach((i) => add(i.createdAt, i.firstResponseAt));
+    for (const i of inquiries) {
+      const own = i.replies[0]?.createdAt ?? null;
+      // Closed by staff without an operator answer (spam, duplicates): not the operator's to answer.
+      if (!own && i.status === 'CLOSED') continue;
+      // Staff answers don't count: the clock runs until the operator answers in the portal.
+      add(i.createdAt, own);
+    }
     quotes.forEach((q) => add(q.createdAt, q.quotedAt ?? q.closedAt));
     const med = median(hours);
 

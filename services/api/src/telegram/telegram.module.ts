@@ -19,6 +19,7 @@ import { TelegramUser } from '@prisma/client';
 import { InquiryCreateInput, inquiryCreateSchema } from '@ttp/shared-types';
 import { Request } from 'express';
 import { PrismaService } from '../common/prisma.service';
+import { NotificationsService } from '../mail/notifications.service';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { botInternalSecret, TelegramBotApi } from './bot-api';
 import { validateInitData } from './init-data';
@@ -80,7 +81,10 @@ const MAX_INQUIRIES_PER_HOUR = 5;
 @Controller('public/telegram')
 @UseGuards(TelegramAuthGuard)
 export class TelegramController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   /** "Request info" from the Mini App. Staff see it in the admin inbox and pass it to the operator. */
   @Post('inquiries')
@@ -118,6 +122,7 @@ export class TelegramController {
         },
       }),
     ]);
+    this.notifications.inquiryReceived(inquiry.id);
     return { id: inquiry.id, operatorName: operator.name, createdAt: inquiry.createdAt };
   }
 }

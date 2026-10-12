@@ -172,3 +172,19 @@ test('an operator imports tours from a spreadsheet and creates a feed key', asyn
   await page.getByRole('link', { name: 'Tours', exact: true }).click();
   await expect(page.getByText('Ssese Islands Escape (e2e)')).toBeVisible();
 });
+
+test('an operator answers a traveller’s question from the inbox; it goes out in Telegram', async ({ page, request }) => {
+  await request.delete('http://localhost:8099/__messages');
+  await signIn(page, 'operator@example.com');
+  await page.getByRole('link', { name: /^Inbox/ }).click();
+  await expect(page.getByText('1 question is waiting for your answer.')).toBeVisible();
+  const card = page.getByRole('article', { name: 'Question from Дмитрий' });
+  await expect(card).toContainText('Можно ли совместить гориллы');
+  await expect(card).not.toContainText('demo_traveller2');
+  await card.getByLabel('Your answer').fill('Yes: 3 days Bwindi, 3 days Queen Elizabeth. From 3,900 USD per person.');
+  await card.getByRole('button', { name: 'Send to traveller' }).click();
+  await expect(card.locator('.pill')).toHaveText('Answered');
+  await expect(card).toContainText('You answered');
+  const calls = await (await request.get('http://localhost:8099/__messages')).json();
+  expect(calls.find((c: { chat_id?: string }) => c.chat_id === '100000005')?.text).toContain('From 3,900 USD per person.');
+});

@@ -34,6 +34,8 @@ Pinned versions are deliberate; don't bump majors without asking.
 - Tour feed (Phase 4): `src/feed` (`/feed/v1`, API keys stored as sha256, CSV import). Feed, CSV and form must follow the same
   publish rules (`FeedService.targetStatus`). Countries are data (`countries.active`); check new country input with
   `activeCountry()` instead of hard-coding codes.
+- Traveller questions: operators answer in the portal (`OperatorInquiriesController`), staff on their behalf in admin; both go through
+  `InquiriesService.answer` (deliver first, then store an `inquiry_replies` row). The response-time score counts operator replies only.
 - Email: `NotificationsService` (`services/api/src/mail`) decides who is told what (EN operators/staff, RU DMCs) over
   `MailService` (SMTP via `SMTP_URL`; without it messages are only logged and kept in `MailService.sent`, which tests read).
   Notify after the action succeeds; never let an email failure undo it.

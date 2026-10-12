@@ -4,6 +4,7 @@ import { api } from './api';
 import { useAuth } from './auth';
 import { DmcFamTripsPage, DmcListingsPage, DmcPendingPage, DmcQuotesPage, InventoryPage } from './pages/Dmc';
 import { ForgotPasswordPage, LoginPage, SetPasswordPage, SignupPage } from './pages/Public';
+import { InboxPage } from './pages/Inbox';
 import { ApplicationPage, IntegrationsPage, OperatorSignupPage } from './pages/Onboarding';
 import { OperatorFamTripsPage, OperatorOverviewPage, OperatorQuotesPage, PackageFormPage, PackagesPage } from './pages/Operator';
 
@@ -26,6 +27,7 @@ export function App() {
             <Route path="packages/new" element={<PackageFormPage />} />
             <Route path="packages/:id" element={<PackageFormPage />} />
             <Route path="integrations" element={<IntegrationsPage />} />
+            {account.operator?.status === 'APPROVED' && <Route path="inbox" element={<InboxPage />} />}
             {account.operator?.status === 'APPROVED' && <Route path="quotes" element={<OperatorQuotesPage />} />}
             {account.operator?.status === 'APPROVED' && <Route path="fam-trips" element={<OperatorFamTripsPage />} />}
           </Route>
@@ -74,6 +76,7 @@ function OperatorShell() {
   const approved = account?.operator?.status === 'APPROVED';
   const overview = useQuery({ queryKey: ['overview'], queryFn: api.overview, enabled: approved });
   const open = overview.data?.openQuotes;
+  const waiting = overview.data?.newQuestions;
   return (
     <div lang="en">
       <header className="topbar">
@@ -82,6 +85,7 @@ function OperatorShell() {
           <nav className="nav" aria-label="Main">
             {approved ? <NavLink to="/" end>Overview</NavLink> : <NavLink to="/application">Application</NavLink>}
             <NavLink to="/packages">Tours</NavLink>
+            {approved && <NavLink to="/inbox">Inbox {!!waiting && <span className="count" aria-label={`${waiting} waiting`}>{waiting}</span>}</NavLink>}
             {approved && <NavLink to="/quotes">Quote requests {!!open && <span className="count" aria-label={`${open} open`}>{open}</span>}</NavLink>}
             {approved && <NavLink to="/fam-trips">Fam trips</NavLink>}
             <NavLink to="/integrations">Integrations</NavLink>

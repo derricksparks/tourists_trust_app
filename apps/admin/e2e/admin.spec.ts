@@ -84,12 +84,12 @@ test('a moderator works the inquiry inbox', async ({ page }) => {
   await page.getByRole('link', { name: /^Inquiries/ }).click();
   const card = page.locator('article', { hasText: 'Сколько стоит сафари на 5 дней?' });
   await expect(card).toContainText('Kilima Horizon Safaris (demo)');
-  await expect(card).toContainText('Forward to the operator: info@kilima-horizon-safaris-demo-tz.example.com');
+  await expect(card).toContainText('The operator answers in the partner portal. Operator’s contact, to chase them: info@kilima-horizon-safaris-demo-tz.example.com');
   await card.getByRole('button', { name: 'Send to traveller' }).click();
   await expect(card.getByRole('alert')).toHaveText('Write the answer before sending.');
   await card.getByRole('button', { name: 'Mark answered without sending' }).click();
   await expect(page.getByText('Сколько стоит сафари на 5 дней?')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Answered' }).click();
+  await page.getByRole('button', { name: 'Answered', exact: true }).click();
   await expect(page.getByText('Сколько стоит сафари на 5 дней?')).toBeVisible();
 });
 
@@ -113,7 +113,7 @@ test('a content editor updates a visa guide and the site shows it', async ({ pag
 test('a moderator can read guides but not change them', async ({ page }) => {
   await signIn(page, 'moderator@example.com');
   await page.getByRole('link', { name: 'Travel guides' }).click();
-  await expect(page.getByRole('link', { name: 'New' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'New', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Как добраться до Уганды' }).click();
   await expect(page.getByText('Only content editors can change guides.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
@@ -154,7 +154,7 @@ test('a moderator gives a stuck translation request to another translator', asyn
 test('a content editor adds an insurer to the comparison', async ({ page, request }) => {
   await signIn(page, 'editor@example.com');
   await page.getByRole('link', { name: 'Insurers' }).click();
-  await page.getByRole('link', { name: 'New' }).click();
+  await page.getByRole('link', { name: 'New', exact: true }).click();
   await page.getByLabel('Name', { exact: true }).fill('Demo Strakhovanie E2E');
   await page.getByLabel('Claims contact').fill('+7 000 999-99-99');
   await page.getByLabel('Repatriation confirmed by the insurer').check();
@@ -184,7 +184,7 @@ test('a moderator invites a traveller who asked through the bot', async ({ page,
   await request.delete('http://localhost:8099/__messages');
   await signIn(page, 'moderator@example.com');
   await page.getByRole('link', { name: /^Inquiries/ }).click();
-  await page.getByRole('button', { name: 'Answered' }).click();
+  await page.getByRole('button', { name: 'Answered', exact: true }).click();
   const card = page.locator('article', { hasText: 'Есть ли места на февраль для двоих?' });
   await card.getByRole('button', { name: 'Invite to review after the trip' }).click();
   await expect(card.getByLabel('Trip date')).toHaveValue('2027-02-01');

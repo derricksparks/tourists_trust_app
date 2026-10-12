@@ -97,6 +97,12 @@ enum InquiryChannel {
   WEB
 }
 
+/// How an answer reached the traveller.
+enum ReplyDelivery {
+  TELEGRAM
+  EMAIL
+}
+
 enum VisaApplicationStatus {
   NOT_STARTED
   GATHERING_DOCUMENTS
@@ -196,6 +202,7 @@ model AdminUser {
   spotCheckedTranslators  Translator[]
   verifiedInsurers        Insurer[]
   updatedVisaApplications VisaApplication[]
+  inquiryReplies          InquiryReply[]
 
   @@map("admin_users")
 }
@@ -215,11 +222,12 @@ model Account {
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
-  operator     Operator?   @relation(fields: [operatorId], references: [id], onDelete: Cascade)
-  dmc          Dmc?        @relation(fields: [dmcId], references: [id], onDelete: Cascade)
-  translator   Translator? @relation(fields: [translatorId], references: [id], onDelete: Cascade)
-  auditEntries AuditLog[]
-  apiKeys      ApiKey[]
+  operator       Operator?      @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  dmc            Dmc?           @relation(fields: [dmcId], references: [id], onDelete: Cascade)
+  translator     Translator?    @relation(fields: [translatorId], references: [id], onDelete: Cascade)
+  auditEntries   AuditLog[]
+  apiKeys        ApiKey[]
+  inquiryReplies InquiryReply[]
 
   @@index([operatorId])
   @@index([dmcId])
@@ -425,10 +433,11 @@ model Inquiry {
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
-  telegramUser TelegramUser? @relation(fields: [telegramUserId], references: [id], onDelete: SetNull)
-  operator     Operator      @relation(fields: [operatorId], references: [id], onDelete: Cascade)
-  package      Package?      @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  telegramUser TelegramUser?  @relation(fields: [telegramUserId], references: [id], onDelete: SetNull)
+  operator     Operator       @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  package      Package?       @relation(fields: [packageId], references: [id], onDelete: SetNull)
   reviewInvite ReviewInvite?
+  replies      InquiryReply[]
 
   @@index([operatorId, createdAt])
   @@index([status])
@@ -810,4 +819,23 @@ model ApiKey {
 
   @@index([operatorId])
   @@map("api_keys")
+}
+
+/// An answer to a traveller's question (pilot round): written by the operator in the partner portal,
+/// or by staff on the operator's behalf. Only operator answers count towards the response-time score.
+model InquiryReply {
+  id              String        @id @default(uuid()) @db.Uuid
+  inquiryId       String        @map("inquiry_id") @db.Uuid
+  body            String
+  authorAccountId String?       @map("author_account_id") @db.Uuid // the operator's portal login
+  authorAdminId   String?       @map("author_admin_id") @db.Uuid // staff answering on the operator's behalf
+  deliveredVia    ReplyDelivery @map("delivered_via")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  inquiry       Inquiry    @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  authorAccount Account?   @relation(fields: [authorAccountId], references: [id], onDelete: SetNull)
+  authorAdmin   AdminUser? @relation(fields: [authorAdminId], references: [id], onDelete: SetNull)
+
+  @@index([inquiryId, createdAt])
+  @@map("inquiry_replies")
 }

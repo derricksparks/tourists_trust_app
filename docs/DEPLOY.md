@@ -88,6 +88,7 @@ Then fill these in `infra/production/.env` (step 4):
 | "Forgot your password?" on the portal | the partner, if the login exists (at most once every 5 minutes) | EN / RU |
 | A Russian DMC applies | staff, plus an acknowledgement to the DMC | EN / RU |
 | Staff approve, reject or suspend a DMC | the DMC | RU |
+| A traveller asks a question in the Mini App | the operator's logins (answer in the portal Inbox); staff if the operator has no login yet | EN |
 | A DMC requests a quote | the operator's logins; staff if the operator has no login yet | EN |
 | An operator quotes or declines | the DMC | RU |
 | A DMC asks to join a fam trip | staff | EN |

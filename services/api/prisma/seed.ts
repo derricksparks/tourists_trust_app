@@ -259,7 +259,7 @@ async function main() {
 
   // ── Telegram users & inquiries ──
   const tourist = await prisma.telegramUser.create({ data: { telegramId: BigInt(100000001), username: 'demo_tourist', firstName: 'Ольга', languageCode: 'ru', consentAt: new Date() } });
-  await prisma.inquiry.create({
+  const answeredInquiry = await prisma.inquiry.create({
     data: { telegramUserId: tourist.id, operatorId: pearl.id, packageId: gorilla.id, contactName: 'Ольга', contactInfo: '@demo_tourist', message: 'Есть ли места на февраль для двоих? (демо)', travelMonth: '2027-02', groupSize: 2, status: 'RESPONDED',
       createdAt: new Date('2026-09-10T08:00:00Z'), firstResponseAt: new Date('2026-09-10T11:30:00Z') },
   });
@@ -355,7 +355,15 @@ async function main() {
 
   // ── Partner portal logins (password = SEED_ADMIN_PASSWORD) ──
   const portalHash = await bcrypt.hash(adminPassword, 12);
-  await prisma.account.create({ data: { email: 'operator@example.com', passwordHash: portalHash, role: 'OPERATOR', operatorId: pearl.id } });
+  const pearlLogin = await prisma.account.create({ data: { email: 'operator@example.com', passwordHash: portalHash, role: 'OPERATOR', operatorId: pearl.id } });
+  // Pilot round: Pearl answered one question in the portal; a second one is waiting in its inbox.
+  await prisma.inquiryReply.create({
+    data: { inquiryId: answeredInquiry.id, authorAccountId: pearlLogin.id, deliveredVia: 'TELEGRAM', body: 'Здравствуйте! Да, на 14–17 февраля есть два места. (демо)', createdAt: new Date('2026-09-10T11:30:00Z') },
+  });
+  const tourist2 = await prisma.telegramUser.create({ data: { telegramId: BigInt(100000005), username: 'demo_traveller2', firstName: 'Дмитрий', languageCode: 'ru', consentAt: new Date() } });
+  await prisma.inquiry.create({
+    data: { telegramUserId: tourist2.id, operatorId: pearl.id, contactName: 'Дмитрий', contactInfo: '@demo_traveller2', message: 'Можно ли совместить гориллы и сафари в Королеве Елизавете за 6 дней? (демо)', travelMonth: '2027-03', groupSize: 3, createdAt: new Date(Date.now() - 5 * 3600 * 1000) },
+  });
   await prisma.account.create({ data: { email: 'operator2@example.com', passwordHash: portalHash, role: 'OPERATOR', operatorId: kilima.id } });
   await prisma.account.create({ data: { email: 'dmc@example.com', passwordHash: portalHash, role: 'DMC', dmcId: dmcA.id } });
   await prisma.account.create({ data: { email: 'dmc-pending@example.com', passwordHash: portalHash, role: 'DMC', dmcId: dmcB.id } });

@@ -9,5 +9,9 @@ export default defineConfig({
     baseURL: 'http://localhost:5174',
     launchOptions: process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {},
   },
-  webServer: { command: 'pnpm exec vite --port 5174 --strictPort', url: 'http://localhost:5174', reuseExistingServer: true },
+  webServer: [
+    { command: 'pnpm exec vite --port 5174 --strictPort', url: 'http://localhost:5174', reuseExistingServer: true },
+    // Stand-in for Telegram; the API must run with TELEGRAM_API_BASE=http://localhost:8099.
+    { command: 'node ../web-content/e2e/fake-telegram.mjs', url: 'http://localhost:8099/__messages', reuseExistingServer: true },
+  ],
 });

@@ -127,6 +127,8 @@ export interface Inquiry {
   operator: { id: string; name: string; slug: string; email: string | null; phone: string | null; telegramUsername: string | null; websiteUrl: string | null };
   package: { title: string; titleRu: string | null } | null;
   telegramUser: { username: string | null; firstName: string | null; lastName: string | null; languageCode: string | null } | null;
+  /** Answers sent to the traveller: by the operator (portal login) or by staff on their behalf. */
+  replies: { id: string; body: string; deliveredVia: 'TELEGRAM' | 'EMAIL'; createdAt: string; authorAccount: { email: string } | null; authorAdmin: { name: string } | null }[];
 }
 
 export interface VisaGuide {

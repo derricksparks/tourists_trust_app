@@ -257,6 +257,7 @@ These keep the meaning of the spec's fields but change how they are stored:
 | *(Phase 4, approved 2026-10-10)* `Package` | + `external_ref`, unique per operator (CHECK on format) | the operator's own id, so spreadsheet re-imports and the feed API update instead of duplicating |
 | *(Phase 4, approved 2026-10-10)* new `api_keys` | operator, name, prefix, sha256 hash, last used, revoked | package feed API (B2B-1 "API later"); the key itself is shown once and never stored |
 | *(Phase 4, approved 2026-10-10)* `Country` | + `name_ru_in`, `active`, `licensing_authority`, `licence_register_url`, `created_at` | countries are added and switched on by staff instead of being hard-coded; Russian page titles need the locative ("в Уганде") |
+| *(Pilot round, requested 2026-10-12)* new `inquiry_replies` | inquiry, body, author (operator login **or** staff, CHECK at most one), delivered via (Telegram/email), time | operators answer travellers in the portal; staff answers on their behalf are recorded as such; the score uses operator answers only. Earlier staff answers were copied in from the audit log |
 
 ---
 
@@ -381,4 +382,26 @@ can prepare draft tours while their application is waiting.
   countries are keyed by ISO code.
 - **Not built:** automatic licence checks against the authorities' registers (staff open the register link),
   photo uploads for tours, and a staff-user management screen (staff logins still come from `cli/setup.js`).
+
+## Part D — Pilot round (requested 2026-10-12)
+
+Small round before a pilot with 5–10 operators and 2–3 DMCs. Still no payment processing or payment fields.
+
+### 1. Operator inbox for traveller questions
+
+- Operators see their travellers' questions in the partner portal (**Inbox**, approved operators only) and
+  answer there. The traveller's Telegram handle and contact details are never shown to the operator; the
+  answer goes out through us: in the bot when the question came from Telegram, by email when there is no
+  Telegram contact but an email address, otherwise the answer is refused (nothing is stored). An answer is
+  stored (`inquiry_replies`) only after it was delivered.
+- The operator is emailed when a question arrives; if nobody at the operator can sign in, staff are emailed
+  instead.
+- Staff keep the full inbox in the dashboard with each question's thread, and can still answer on the
+  operator's behalf (recorded as a staff answer, audit `inquiry.reply` with `onBehalfOf`), mark it answered
+  without sending, or close it.
+- Status per question stays `NEW` → `RESPONDED` (first answer by anyone, `first_response_at`) → `CLOSED`.
+- **Response-time score (TV-6) now uses the operator's own first answer only.** A question answered only by
+  staff counts as unanswered by the operator (72 h once 72 h have passed). A question staff closed without an
+  operator answer (spam, duplicates) is left out.
+- Not built: travellers replying back in the thread (their Telegram replies to the bot are not threaded).
 

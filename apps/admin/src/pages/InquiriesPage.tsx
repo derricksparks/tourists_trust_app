@@ -91,17 +91,31 @@ function InquiryCard({ inquiry: i }: { inquiry: Inquiry }) {
         {i.message}
       </blockquote>
       <p className="muted" style={{ fontSize: '0.86rem' }}>
-        Forward to the operator:{' '}
+        The operator answers in the partner portal. Operator&rsquo;s contact, to chase them:{' '}
         {[op.email, op.phone, op.telegramUsername && `@${op.telegramUsername.replace(/^@/, '')}`].filter(Boolean).join(' · ') || 'no contact details on file'}
       </p>
+      {i.replies.length > 0 && (
+        <ol className="history" aria-label="Answers sent">
+          {i.replies.map((r) => (
+            <li key={r.id}>
+              <time dateTime={r.createdAt}>{formatDateTime(r.createdAt)}</time>
+              <span>
+                <strong>{r.authorAdmin ? `${r.authorAdmin.name} (staff, on the operator’s behalf)` : r.authorAccount ? `${op.name} (${r.authorAccount.email})` : 'Deleted user'}</strong>
+                <span className="muted"> · by {r.deliveredVia === 'EMAIL' ? 'email' : 'Telegram'}</span>
+              </span>
+              <span lang="ru" style={{ whiteSpace: 'pre-wrap' }}>{r.body}</span>
+            </li>
+          ))}
+        </ol>
+      )}
       {i.firstResponseAt && <p className="muted" style={{ fontSize: '0.86rem' }}>Answered {formatDateTime(i.firstResponseAt)}</p>}
       {canModerate && i.status !== 'CLOSED' && (
         <div className="stack" style={{ gap: 10 }}>
-          {i.telegramUser ? (
+          {i.telegramUser || (i.contactInfo && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(i.contactInfo)) ? (
             <form className="stack" style={{ gap: 8 }} onSubmit={submit}>
               <div className="field">
-                <label htmlFor={`reply-${i.id}`}>Answer to send in Telegram</label>
-                <textarea id={`reply-${i.id}`} lang="ru" value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Paste or translate the operator's answer, in Russian" />
+                <label htmlFor={`reply-${i.id}`}>Answer on the operator&rsquo;s behalf ({i.telegramUser ? 'sent in Telegram' : 'sent by email'})</label>
+                <textarea id={`reply-${i.id}`} lang="ru" value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Only if the operator can't: it is recorded as a staff answer and doesn't count for the operator's response time" />
               </div>
               <div className="row-wrap">
                 <button className="btn primary" type="submit" disabled={send.isPending}>
@@ -128,7 +142,7 @@ function InquiryCard({ inquiry: i }: { inquiry: Inquiry }) {
             </div>
           )}
           {error && <p className="alert err" role="alert">{error}</p>}
-          {send.isSuccess && <p className="alert ok" role="status">Sent. {who} has the answer in Telegram.</p>}
+          {send.isSuccess && <p className="alert ok" role="status">Sent. {who} has the answer; it is recorded as a staff answer.</p>}
         </div>
       )}
       {i.status === 'CLOSED' && <p className="muted">{titleCase(i.status)}.</p>}

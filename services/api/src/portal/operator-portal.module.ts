@@ -55,9 +55,10 @@ export class OperatorPortalController {
   @Get('overview')
   async overview(@CurrentAccount() a: PortalAccount) {
     const op = operatorOf(a);
-    const [scores, openQuotes, packages, famTrips] = await Promise.all([
+    const [scores, openQuotes, newQuestions, packages, famTrips] = await Promise.all([
       this.scoring.breakdown(op.id),
       this.prisma.quoteRequest.count({ where: { status: 'OPEN', package: { operatorId: op.id } } }),
+      this.prisma.inquiry.count({ where: { status: 'NEW', operatorId: op.id } }),
       this.prisma.package.groupBy({ by: ['status'], where: { operatorId: op.id }, _count: { _all: true }, orderBy: { status: 'asc' } }),
       this.prisma.famTripOperator.count({ where: { operatorId: op.id, famTrip: { endDate: { gte: new Date() }, status: { in: ['PLANNED', 'CONFIRMED'] } } } }),
     ]);
@@ -65,6 +66,7 @@ export class OperatorPortalController {
       operator: { id: op.id, name: op.name, slug: op.slug, status: op.status, statusReason: op.status === 'APPROVED' ? null : op.statusReason },
       scores,
       openQuotes,
+      newQuestions,
       packagesByStatus: Object.fromEntries(packages.map((p) => [p.status, (p._count as { _all: number })._all])),
       upcomingFamTrips: famTrips,
     };
